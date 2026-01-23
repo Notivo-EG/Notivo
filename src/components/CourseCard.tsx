@@ -49,8 +49,8 @@ export function CourseCard({ title, code, daysLastOpened, progress = 0, onClick 
     // Animation for "Critical" state (Wiggling)
     const wiggleAnimation = health === "critical" ? {
         rotate: [0, -1, 1, -1, 0],
-        transition: { repeat: Infinity, duration: 0.4, ease: "easeInOut" }
-    } : {};
+        transition: { repeat: Infinity, duration: 0.4, ease: "easeInOut" as const }
+    } : undefined;
 
     return (
         <motion.div
@@ -82,7 +82,7 @@ export function CourseCard({ title, code, daysLastOpened, progress = 0, onClick 
                     initial={{ width: 0 }}
                     animate={{ width: `${progress}%` }}
                     className={`h-full rounded-full transition-all duration-500 ${health === "healthy" ? "bg-bio" :
-                            health === "decaying" ? "bg-ember" : "bg-red-500"
+                        health === "decaying" ? "bg-ember" : "bg-red-500"
                         } group-hover:bg-bio`}
                 />
             </div>

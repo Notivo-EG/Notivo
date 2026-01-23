@@ -597,11 +597,11 @@ function NotebookCard({
             // Updated to be a bit more subtle/organic "breathing" check
             opacity: [0.5, 0.8, 0.5],
             transition: {
-              rotate: { repeat: Infinity, duration: 0.5, ease: "easeInOut" },
-              opacity: { repeat: Infinity, duration: 2, ease: "easeInOut" }
+              rotate: { repeat: Infinity, duration: 0.5, ease: "easeInOut" as const },
+              opacity: { repeat: Infinity, duration: 2, ease: "easeInOut" as const }
             },
           }
-          : {}
+          : undefined
       }
       className={`w-48 h-64 rounded-2xl glass p-6 flex flex-col justify-between transition-all ${saturation} border-white/5 bg-[#0e0e0e] hover:bg-[#151515]`}
       style={{ opacity }}
