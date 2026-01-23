@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="public/favicon.ico" alt="Notivo Logo" width="80" height="80">
+  <img src="public/favicon.ico" alt="Notiva Logo" width="80" height="80">
 </p>
 
-<h1 align="center">Notivo</h1>
+<h1 align="center">Notiva</h1>
 
 <p align="center">
   <strong>The Everything App for Students</strong>
@@ -89,8 +89,8 @@
 
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/yourusername/notivo.git
-   cd notivo
+   git clone https://github.com/yourusername/notiva.git
+   cd notiva
    ```
 
 2. **Install dependencies**
@@ -145,7 +145,7 @@
 ## 📁 Project Structure
 
 ```
-notivo/
+notiva/
 ├── public/                 # Static assets
 │   └── sounds/            # Sound effect files
 ├── src/

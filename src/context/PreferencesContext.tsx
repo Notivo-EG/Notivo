@@ -53,7 +53,7 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
     // Initialize preferences
     useEffect(() => {
         // Load from localStorage
-        const stored = localStorage.getItem("notivo_preferences");
+        const stored = localStorage.getItem("notiva_preferences");
         if (stored) {
             try {
                 setPreferences(prev => ({ ...prev, ...JSON.parse(stored) }));
@@ -69,7 +69,7 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
                     if (data?.preferences) {
                         const merged = { ...preferences, ...data.preferences };
                         setPreferences(merged);
-                        localStorage.setItem("notivo_preferences", JSON.stringify(merged));
+                        localStorage.setItem("notiva_preferences", JSON.stringify(merged));
                     }
                 }
             } catch (err) {
@@ -178,7 +178,7 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
         const newPrefs = { ...preferences, [key]: newVal };
 
         setPreferences(newPrefs);
-        localStorage.setItem("notivo_preferences", JSON.stringify(newPrefs));
+        localStorage.setItem("notiva_preferences", JSON.stringify(newPrefs));
 
         // Play feedback sound
         if (key === 'soundEffects') {

@@ -149,7 +149,7 @@ export default function LandingPage() {
         {/* Top Navigation Mockup */}
         <nav className="w-full flex justify-between items-center py-6 mb-8 text-xs md:text-sm font-medium text-white/60">
           <div className="flex items-center gap-2 text-white font-bold text-base md:text-lg">
-            <Brain className="w-4 h-4 md:w-5 md:h-5" /> Notivo
+            <Brain className="w-4 h-4 md:w-5 md:h-5" /> Notiva
           </div>
           <div className="flex gap-4">
             <Link href="/login" className="flex items-center justify-center hover:text-white transition-colors">Sign In</Link>

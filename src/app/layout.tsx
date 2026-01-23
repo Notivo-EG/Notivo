@@ -15,7 +15,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Notivo | AI Academic Architect",
+  title: "Notiva | AI Academic Architect",
   description: "Don't just take notes. Engineer your degree. AI-powered academic planning that adapts when life happens.",
   keywords: ["study planner", "academic architect", "AI learning", "course planning", "exam preparation"],
 };
