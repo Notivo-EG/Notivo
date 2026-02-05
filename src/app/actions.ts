@@ -1,6 +1,6 @@
 "use server";
 
-import { geminiModel, geminiVisionModel } from "@/lib/gemini";
+import { geminiModel, geminiVisionModel, uploadFileToGemini } from "@/lib/gemini";
 
 // Helper to convert File to GoogleGenerativeAI Part
 async function fileToPart(file: File) {
@@ -46,7 +46,7 @@ export async function parseCourseTree(formData: FormData) {
         `;
 
         // Generate Content
-        // Using "gemini-1.5-flash" which supports multimodal input
+        // Using "gemini-2.5-flash" which supports multimodal input
         const filePart = await fileToPart(file);
         const result = await geminiVisionModel.generateContent([prompt, filePart]);
         const response = await result.response;
@@ -112,6 +112,75 @@ export async function parseCurriculumTree(formData: FormData) {
     }
 }
 
+// Helper: Download from Supabase and Upload to Gemini (Smart Fetch)
+async function downloadAndUploadToGemini(supabase: any, contentUrl: string, fileName: string, mimeType: string = 'application/pdf') {
+    try {
+        console.log(`Smart Fetch: Downloading ${fileName} from ${contentUrl}...`);
+
+        // 1. Download from Supabase
+        // Extract path from URL or use the relative path if stored
+        // contentUrl might be a full URL, but storage.download needs the path
+        // Assuming contentUrl is like: .../storage/v1/object/public/materials/courseId/filename
+        // But for private buckets or if we just have the path, it's safer to download via fetch if public, or admin client if private.
+        // Let's assume contentUrl is accessible via fetch since it's "publicUrl" in uploadBrainMaterial.
+
+        const response = await fetch(contentUrl);
+        if (!response.ok) throw new Error(`Failed to download file from Supabase: ${response.statusText}`);
+
+        const arrayBuffer = await response.arrayBuffer();
+        const buffer = Buffer.from(arrayBuffer);
+
+        // 2. Save to Temp
+        const tempPath = path.join(os.tmpdir(), `temp_${Date.now()}_${fileName}`);
+        await fs.promises.writeFile(tempPath, buffer);
+
+        // 3. Upload to Gemini
+        // We can't use our uploadFileToGemini helper directly because it expects a File object (web API), 
+        // but here we have a disk file.
+        // Actually uploadFileToGemini in lib/gemini.ts takes a File object.
+        // Let's modify uploadFileToGemini or use the underlying fileManager directly here.
+        // To reuse uploadFileToGemini, we'd need to mock a File object, which is messy in Node.
+        // Better to import fileManager from lib/gemini and use it directly.
+
+        const { GoogleAIFileManager, FileState } = require("@google/generative-ai/server");
+        const fileManager = new GoogleAIFileManager(process.env.GEMINI_API_KEY!);
+
+        console.log(`Uploading ${fileName} to Gemini...`);
+        const uploadResponse = await fileManager.uploadFile(tempPath, {
+            mimeType: mimeType,
+            displayName: fileName,
+        });
+
+        const fileUri = uploadResponse.file.uri;
+        const uploadName = uploadResponse.file.name;
+
+        // Wait for active
+        let fileState = uploadResponse.file.state;
+        while (fileState === FileState.PROCESSING) {
+            await new Promise((resolve) => setTimeout(resolve, 2000));
+            const fileStatus = await fileManager.getFile(uploadName);
+            fileState = fileStatus.state;
+        }
+
+        if (fileState === FileState.FAILED) {
+            throw new Error("Gemini File Processing Failed");
+        }
+
+        // Cleanup
+        await fs.promises.unlink(tempPath);
+
+        return { uri: fileUri, mimeType: mimeType };
+
+    } catch (error) {
+        console.error("Smart Fetch Error:", error);
+        throw error;
+    }
+}
+
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
+
 // LEVEL 4: BRAIN UPLOAD ACTION
 import { createClient } from "@/lib/supabase/server";
 
@@ -143,8 +212,15 @@ export async function uploadBrainMaterial(formData: FormData, courseId: string) 
             .getPublicUrl(filePath);
 
         // 2. Analyze with Gemini
-        // We use the same 'fileToPart' helper to send the buffer to Gemini
-        const filePart = await fileToPart(file);
+        // Use Native File API
+        const uploadedFile = await uploadFileToGemini(file, file.type);
+
+        const filePart = {
+            fileData: {
+                mimeType: uploadedFile.mimeType,
+                fileUri: uploadedFile.uri
+            }
+        };
 
         let prompt = "";
         if (type === 'slide') {
@@ -213,34 +289,77 @@ export async function generateFlashcards(courseId: string) {
             return { success: false, error: "No materials uploaded yet. Upload slides first!" };
         }
 
-        // 2. Compile content from ai_summary fields
-        const summaries = materials.map((m: any) => {
-            const summary = m.ai_summary;
-            return `## ${m.title}\nType: ${m.type}\nTopics: ${summary.topics?.join(', ') || summary.concepts?.join(', ') || 'N/A'}\nSummary: ${summary.summary || 'PDF analyzed'}`;
-        }).join('\n\n');
+        // 2. Smart Fetch: Prepare files for Gemini
+        // We'll use the top 5 most recent files to avoid context context limits if too many
+        const recentMaterials = materials.slice(0, 5);
 
-        // 3. Generate Flashcards with Gemini
+        const fileParts = await Promise.all(recentMaterials.map(async (m: any) => {
+            try {
+                // Determine mime type (defaulting to pdf)
+                const mimeType = m.type === 'sheet' || m.type === 'problem_sheet' ? 'application/pdf' : 'application/pdf'; // Store mime in DB? For now assume PDF.
+                const { uri } = await downloadAndUploadToGemini(supabase, m.content_url, m.title, mimeType);
+                return {
+                    fileData: {
+                        mimeType: mimeType,
+                        fileUri: uri
+                    }
+                };
+            } catch (e) {
+                console.error(`Failed to process ${m.title} for flashcards:`, e);
+                return null;
+            }
+        }));
+
+        const validFileParts = fileParts.filter(p => p !== null);
+
+        if (validFileParts.length === 0) {
+            // Fallback to text summary if all uploads fail
+            const summaries = materials.map((m: any) => {
+                const summary = m.ai_summary;
+                return `## ${m.title}\nType: ${m.type}\nTopics: ${summary.topics?.join(', ') || summary.concepts?.join(', ') || 'N/A'}\nSummary: ${summary.summary || 'PDF analyzed'}`;
+            }).join('\n\n');
+
+            const prompt = `
+            You are a Study Coach creating flashcards for a student.
+            Based on the following course material summaries, generate 10-15 high-quality flashcards.
+            MATERIAL OVERVIEW:
+            ${summaries}
+            
+            OUTPUT FORMAT (JSON Array, no markdown):
+            [{ "front": "...", "back": "...", "tags": [] }]
+            `;
+
+            const result = await geminiModel.generateContent(prompt);
+            const response = await result.response;
+            const text = response.text();
+            const jsonString = text.replace(/```json/g, "").replace(/```/g, "").trim();
+            const flashcardsData = JSON.parse(jsonString);
+
+            // Insert and return... (dup logic, simplified for now)
+            const flashcardsToInsert = flashcardsData.map((fc: any) => ({
+                student_course_id: courseId,
+                front: fc.front,
+                back: fc.back,
+                tags: fc.tags || []
+            }));
+            const { error: insertError } = await supabase.from('flashcards').insert(flashcardsToInsert);
+            if (insertError) throw insertError;
+            return { success: true, count: flashcardsToInsert.length };
+        }
+
+        // 3. Generate Flashcards with Gemini (Native File API)
         const prompt = `
-You are a Study Coach creating flashcards for a student.
+        You are a Study Coach.
+        Access the attached course materials (PDFs).
+        Generate 15 high-quality, challenging flashcards that cover the core concepts found in these documents.
 
-Based on the following course material summaries, generate 10-15 high-quality flashcards.
+        OUTPUT FORMAT (JSON Array, no markdown):
+        [
+          { "front": "Question", "back": "Detailed Answer", "tags": ["topic"] }
+        ]
+        `;
 
-MATERIAL OVERVIEW:
-${summaries}
-
-OUTPUT FORMAT (JSON Array, no markdown):
-[
-  { "front": "Question or term", "back": "Answer or definition", "tags": ["topic1", "topic2"] }
-]
-
-RULES:
-1. Mix question types: definitions, concepts, application, comparison.
-2. Front should be a clear question or term.
-3. Back should be concise but complete.
-4. Tags should reflect the topic area.
-`;
-
-        const result = await geminiModel.generateContent(prompt);
+        const result = await geminiModel.generateContent([prompt, ...validFileParts]);
         const response = await result.response;
         const text = response.text();
         const jsonString = text.replace(/```json/g, "").replace(/```/g, "").trim();
@@ -301,30 +420,27 @@ export async function generateQuizAction(courseId: string, config: {
             ? (courseData?.majors[0] as any)?.name
             : (courseData?.majors as any)?.name;
 
-        let context = "";
-
+        // 2. Smart Fetch for Quiz Context
+        let fileParts: any[] = [];
         if (materials && materials.length > 0) {
-            context = `COURSE: ${courseData?.name || 'Unknown'} (${majorName || 'Unknown'})
-             
-             MATERIALS:
-             ${materials.map((m: any) => JSON.stringify(m.ai_summary)).join('\n')}`;
-        } else {
-            context = `COURSE: ${courseData?.name || 'Unknown'}
-             MAJOR: ${majorName || 'General Studies'}
-             
-             WARNING: No specific materials were uploaded for this course. 
-             YOU MUST GENERATE A QUIZ BASED ON THE STANDARD CURRICULUM FOR A UNIVERSITY COURSE TITLED "${courseData?.name}" IN THE FIELD OF "${majorName}".
-             Ensure questions are appropriate for this level.`;
+            const recentMaterials = materials.slice(0, 5);
+            fileParts = (await Promise.all(recentMaterials.map(async (m: any) => {
+                try {
+                    const mimeType = 'application/pdf';
+                    const { uri } = await downloadAndUploadToGemini(supabase, m.content_url, m.title, mimeType);
+                    return { fileData: { mimeType, fileUri: uri } };
+                } catch { return null; }
+            }))).filter(p => p !== null);
         }
 
-        // 2. Prompt Gemini
+        // 3. Prompt Gemini
         const totalQs = config.mcqConcepts + config.mcqProblems + config.trueFalse + config.writtenConcepts + config.writtenProblems;
 
         const prompt = `
-        You are a Professor creating a quiz for a university course.
+        You are a Professor creating a quiz for a university course: ${courseData?.name} (${majorName}).
         
-        CONTEXT (Course Materials Summaries):
-        ${context.slice(0, 10000)} // Limit context to avoid token limits
+        Using the ATTACHED DOCUMENTS (if any) as the primary source material, generate a rigorous quiz.
+        If no documents are attached, generate based on standard curriculum for this subject.
 
         REQUEST: Generate a JSON Quiz with exactly ${totalQs} questions distributed as follows:
         - ${config.mcqConcepts} MCQ (Conceptual)
@@ -466,6 +582,53 @@ export async function evaluateQuizAction(formData: FormData) {
 
     } catch (error: any) {
         console.error("Grading Error:", error);
+        return { success: false, error: error.message };
+    }
+}
+
+// LEVEL 4: INFOGRAPHIC ACTION (STAGE 1 CHECKPOINT)
+export async function generateInfographicAction(courseId: string, materialId: string, customPrompt?: string) {
+    const supabase = await createClient();
+    try {
+        // 1. Fetch Material Info
+        const { data: material } = await supabase
+            .from('course_materials')
+            .select('*')
+            .eq('id', materialId)
+            .single();
+
+        if (!material) throw new Error("Material not found");
+
+        // 2. Smart Fetch & Upload to Gemini
+        const mimeType = 'application/pdf'; // assume PDF for now
+        const { uri } = await downloadAndUploadToGemini(supabase, material.content_url, material.title, mimeType);
+
+        const systemPrompt = `
+        You are an Expert Information Designer.
+        Analyze this document to create a high-impact Infographic.
+        
+        User Goal: ${customPrompt || "Summarize the key concepts visually."}
+        
+        OUTPUT FORMAT (JSON):
+        {
+          "insights": ["Key point 1", "Key point 2", "Key point 3"],
+          "summary": "Brief summary",
+          "entities": ["Concept A", "Concept B"],
+          "infographicPrompt": "Detailed visual description for an image generator (e.g. 'A futuristic 3D infographic showing...')",
+          "aspectRatio": "3:4" | "16:9" | "1:1"
+        }
+        `;
+
+        const result = await geminiVisionModel.generateContent([systemPrompt, { fileData: { mimeType, fileUri: uri } }]);
+        const response = await result.response;
+        const text = response.text();
+        const jsonString = text.replace(/```json/g, "").replace(/```/g, "").trim();
+        const data = JSON.parse(jsonString);
+
+        return { success: true, data: data };
+
+    } catch (error: any) {
+        console.error("Infographic Action Error:", error);
         return { success: false, error: error.message };
     }
 }

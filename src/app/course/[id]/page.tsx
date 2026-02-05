@@ -30,7 +30,8 @@ import {
     CheckSquare,
     XCircle,
     HelpCircle,
-    RefreshCw
+    RefreshCw,
+    Image
 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
@@ -39,6 +40,7 @@ import { createClient } from "@/lib/supabase/client";
 import { FileUpload } from "@/components/FileUpload";
 import { parseCourseTree, uploadBrainMaterial, generateFlashcards, generateQuizAction, evaluateQuizAction } from "@/app/actions";
 import { usePreferences } from "@/context/PreferencesContext";
+import { CourseInfographicTab } from "@/components/infographic/CourseInfographicTab";
 
 // Types
 interface Course {
@@ -66,7 +68,7 @@ export default function CoursePage() {
     const supabase = createClient();
     const { playSound } = usePreferences();
 
-    const [brainTab, setBrainTab] = useState<'content' | 'flashcards' | 'videos' | 'extra' | 'quiz'>('content');
+    const [brainTab, setBrainTab] = useState<'content' | 'flashcards' | 'infographic' | 'videos' | 'extra' | 'quiz'>('content');
 
     const [course, setCourse] = useState<Course | null>(null);
     const [loading, setLoading] = useState(true);
@@ -325,6 +327,12 @@ export default function CoursePage() {
                             label="Flashcards"
                         />
                         <TabButton
+                            active={brainTab === 'infographic'}
+                            onClick={() => setBrainTab('infographic')}
+                            icon={Image}
+                            label="Infographic"
+                        />
+                        <TabButton
                             active={brainTab === 'videos'}
                             onClick={() => setBrainTab('videos')}
                             icon={Youtube}
@@ -347,6 +355,7 @@ export default function CoursePage() {
                     <div className="min-h-[400px]">
                         {brainTab === 'content' && <ContentEngineTab courseId={courseId} />}
                         {brainTab === 'flashcards' && <FlashcardsTab courseId={courseId} />}
+                        {brainTab === 'infographic' && <CourseInfographicTab courseId={courseId} />}
                         {brainTab === 'quiz' && <QuizTab courseId={courseId} />}
                         {brainTab === 'videos' && <VideoTutorTab />}
                         {brainTab === 'extra' && <ExtraCurricularTab />}
@@ -416,9 +425,9 @@ function ContentEngineTab({ courseId }: { courseId: string }) {
             } else {
                 throw new Error(result.error);
             }
-        } catch (error) {
+        } catch (error: any) {
             console.error(error);
-            alert("Upload failed. Make sure you created the 'materials' bucket!");
+            alert(`Upload failed: ${error?.message || 'Unknown error. Check browser console.'}`);
         } finally {
             setIsUploading(false);
         }
