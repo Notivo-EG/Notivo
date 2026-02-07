@@ -36,6 +36,19 @@ export default function RootLayout({
             <main className="flex-1 min-h-screen">{children}</main>
           </div>
         </PreferencesProvider>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              window.MathJax = {
+                tex: {
+                  inlineMath: [['$', '$'], ['\\\\(', '\\\\)']],
+                  displayMath: [['$$', '$$'], ['\\\\[', '\\\\]']]
+                }
+              };
+            `,
+          }}
+        />
+        <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
       </body>
     </html>
   );

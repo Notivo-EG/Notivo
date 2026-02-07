@@ -507,6 +507,7 @@ function FlashcardsTab({ courseId }: { courseId: string }) {
     const [isGenerating, setIsGenerating] = useState(false);
     const [currentIndex, setCurrentIndex] = useState(0);
     const [isFlipped, setIsFlipped] = useState(false);
+    const [showExplanation, setShowExplanation] = useState(false);
     const [filter, setFilter] = useState<'all' | 'bookmarked' | 'done'>('all');
 
     useEffect(() => {
@@ -520,6 +521,16 @@ function FlashcardsTab({ courseId }: { courseId: string }) {
         };
         fetchFlashcards();
     }, [courseId, supabase]);
+
+    // Re-render MathJax when content changes
+    useEffect(() => {
+        if (typeof window !== 'undefined' && (window as any).MathJax) {
+            // Use setTimeout to ensure DOM is ready
+            setTimeout(() => {
+                (window as any).MathJax.typesetPromise().catch((err: any) => console.log('MathJax error:', err));
+            }, 100);
+        }
+    }, [currentIndex, isFlipped, showExplanation, flashcards]);
 
     const handleGenerate = async () => {
         setIsGenerating(true);
@@ -566,6 +577,7 @@ function FlashcardsTab({ courseId }: { courseId: string }) {
 
     const nextCard = () => {
         setIsFlipped(false);
+        setShowExplanation(false);
         const filtered = getFilteredCards();
         const nextIdx = filtered.findIndex((c, i) => i > currentIndex) !== -1 ? filtered.findIndex((c, i) => i > currentIndex) : 0;
         setCurrentIndex(flashcards.indexOf(filtered[nextIdx >= filtered.length ? 0 : nextIdx]));
@@ -573,6 +585,7 @@ function FlashcardsTab({ courseId }: { courseId: string }) {
 
     const prevCard = () => {
         setIsFlipped(false);
+        setShowExplanation(false);
         const filtered = getFilteredCards();
         const prevIdx = [...filtered].reverse().findIndex((c) => flashcards.indexOf(c) < currentIndex);
         const actualIdx = prevIdx >= 0 ? filtered.length - 1 - prevIdx : filtered.length - 1;
@@ -619,7 +632,7 @@ function FlashcardsTab({ courseId }: { courseId: string }) {
                     {(['all', 'bookmarked', 'done'] as const).map((f) => (
                         <button
                             key={f}
-                            onClick={() => { setFilter(f); setCurrentIndex(0); setIsFlipped(false); playSound('click'); }}
+                            onClick={() => { setFilter(f); setCurrentIndex(0); setIsFlipped(false); setShowExplanation(false); playSound('click'); }}
                             className={`w-full text-left px-4 py-2 rounded-xl flex items-center justify-between transition-colors ${filter === f ? 'bg-purple-600/20 text-foreground' : 'text-foreground/40 hover:bg-foreground/5'}`}
                         >
                             <span className="capitalize flex items-center gap-2">
@@ -640,7 +653,7 @@ function FlashcardsTab({ courseId }: { courseId: string }) {
                     {filteredCards.map((card, i) => (
                         <button
                             key={card.id}
-                            onClick={() => { setCurrentIndex(flashcards.indexOf(card)); setIsFlipped(false); playSound('click'); }}
+                            onClick={() => { setCurrentIndex(flashcards.indexOf(card)); setIsFlipped(false); setShowExplanation(false); playSound('click'); }}
                             className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors flex items-center gap-2 ${flashcards.indexOf(card) === currentIndex ? 'bg-blue-600/30 text-foreground' : 'text-foreground/50 hover:bg-foreground/5'}`}
                         >
                             <span className="w-5 h-5 rounded bg-foreground/10 flex items-center justify-center text-xs">{i + 1}</span>
@@ -669,91 +682,140 @@ function FlashcardsTab({ courseId }: { courseId: string }) {
                     </div>
                 ) : (
                     <>
-                        {/* Card Counter & Actions */}
-                        <div className="flex items-center justify-between mb-6">
-                            <p className="text-foreground/40">
-                                Card {currentFilteredIndex + 1} of {filteredCards.length}
-                            </p>
-                            <button
-                                onClick={() => { toggleBookmark(currentCard.id, currentCard.is_bookmarked); playSound('click'); }}
-                                className={`flex items-center gap-2 px-4 py-2 rounded-full border transition-all ${currentCard.is_bookmarked ? 'bg-yellow-500/20 border-yellow-500/50 text-yellow-400' : 'bg-foreground/5 border-foreground/10 text-foreground/40 hover:text-foreground'}`}
-                            >
-                                <Bookmark className={`w-4 h-4 ${currentCard.is_bookmarked ? 'fill-yellow-400' : ''}`} />
-                                {currentCard.is_bookmarked ? 'Bookmarked' : 'Bookmark'}
-                            </button>
-                        </div>
-
-                        {/* 3D Flashcard */}
+                        {/* 3D Flashcard Container */}
                         <div
-                            className="perspective-1000 cursor-pointer"
+                            className="perspective-1000 cursor-pointer mb-6"
                             onClick={handleFlip}
                             style={{ perspective: '1000px' }}
                         >
                             <motion.div
-                                className="relative h-[320px] w-full"
+                                className="relative h-[400px] w-full"
                                 animate={{ rotateY: isFlipped ? 180 : 0 }}
                                 transition={{ duration: 0.6, type: "spring", stiffness: 100 }}
                                 style={{ transformStyle: 'preserve-3d' }}
                             >
-                                {/* Front */}
+                                {/* Front Side */}
                                 <div
-                                    className="absolute inset-0 rounded-[2rem] bg-gradient-to-br from-blue-600/20 to-purple-600/10 border border-card-border backdrop-blur-md p-8 flex flex-col items-center justify-center text-center shadow-xl"
+                                    className="absolute inset-0 rounded-[2rem] bg-gradient-to-br from-blue-600/20 via-[#1a1a2e] to-purple-600/10 border border-card-border backdrop-blur-md p-10 flex flex-col items-center justify-center text-center shadow-xl"
                                     style={{ backfaceVisibility: 'hidden' }}
                                 >
-                                    <p className="text-xs text-blue-400 uppercase tracking-wider mb-4">Question</p>
-                                    <p className="text-2xl font-bold text-foreground">{currentCard.front}</p>
-                                    <p className="absolute bottom-6 text-foreground/20 text-sm">Click to reveal answer</p>
+                                    {/* Type Badge */}
+                                    <div className="absolute top-6 left-6">
+                                        <span className="px-3 py-1 rounded-full bg-gradient-to-r from-pink-500 to-rose-500 text-white text-xs font-bold uppercase tracking-wider shadow-lg">
+                                            {currentCard.type || "General"}
+                                        </span>
+                                    </div>
+
+                                    {/* Content */}
+                                    <div className="flex-1 flex flex-col items-center justify-center w-full">
+                                        <p className="text-xs text-blue-400 uppercase tracking-[0.2em] mb-6 font-semibold">Question</p>
+                                        <div className="text-2xl md:text-3xl font-bold text-foreground leading-relaxed">
+                                            {currentCard.front}
+                                        </div>
+                                    </div>
+
+                                    <p className="absolute bottom-6 text-foreground/30 text-sm font-medium animate-pulse">
+                                        Click to Reveal Answer
+                                    </p>
+
                                     {currentCard.review_count > 0 && (
-                                        <div className="absolute top-4 right-4 flex items-center gap-1 text-green-400 text-xs">
-                                            <Check className="w-4 h-4" /> Reviewed
+                                        <div className="absolute top-6 right-6 flex items-center gap-1.5 text-green-400 text-xs font-bold bg-green-400/10 px-3 py-1 rounded-full border border-green-400/20">
+                                            <Check className="w-3.5 h-3.5" /> Reviewed
                                         </div>
                                     )}
                                 </div>
 
-                                {/* Back */}
+                                {/* Back Side */}
                                 <div
-                                    className="absolute inset-0 rounded-[2rem] bg-gradient-to-br from-green-600/20 to-blue-600/10 border border-card-border backdrop-blur-md p-8 flex flex-col items-center justify-center text-center shadow-xl"
+                                    className="absolute inset-0 rounded-[2rem] bg-gradient-to-br from-green-600/20 via-[#1a1a2e] to-blue-600/10 border border-[rgba(74,222,128,0.3)] backdrop-blur-md p-10 flex flex-col items-center justify-center text-center shadow-xl"
                                     style={{ backfaceVisibility: 'hidden', transform: 'rotateY(180deg)' }}
                                 >
-                                    <p className="text-xs text-green-400 uppercase tracking-wider mb-4">Answer</p>
-                                    <p className="text-xl text-foreground">{currentCard.back}</p>
-                                    <p className="absolute bottom-6 text-foreground/20 text-sm">Click to flip back</p>
+                                    {/* Type Badge */}
+                                    <div className="absolute top-6 left-6">
+                                        <span className="px-3 py-1 rounded-full bg-gradient-to-r from-pink-500 to-rose-500 text-white text-xs font-bold uppercase tracking-wider shadow-lg">
+                                            {currentCard.type || "General"}
+                                        </span>
+                                    </div>
+
+                                    {/* Content */}
+                                    <div className="flex-1 flex flex-col items-center justify-center w-full">
+                                        <p className="text-xs text-green-400 uppercase tracking-[0.2em] mb-6 font-semibold">Answer</p>
+                                        <div className="text-xl md:text-2xl font-medium text-green-100 leading-relaxed">
+                                            {currentCard.back}
+                                        </div>
+                                    </div>
+
+                                    <p className="absolute bottom-6 text-foreground/30 text-sm font-medium">
+                                        Click to flip back
+                                    </p>
                                 </div>
                             </motion.div>
                         </div>
 
-                        {/* Navigation */}
-                        <div className="flex items-center justify-center gap-4 mt-8">
-                            <button
-                                onClick={() => { prevCard(); playSound('click'); }}
-                                className="w-12 h-12 rounded-full bg-foreground/5 border border-foreground/10 flex items-center justify-center hover:bg-foreground/10 transition-colors"
-                            >
-                                <ArrowLeft className="w-5 h-5 text-foreground/60" />
-                            </button>
-                            <button
-                                onClick={() => { nextCard(); playSound('click'); }}
-                                className="px-8 py-3 rounded-full bg-blue-600 hover:bg-blue-500 text-white font-bold transition-colors flex items-center gap-2"
-                            >
-                                Next Card <ChevronRight className="w-4 h-4" />
-                            </button>
-                            <button
-                                onClick={() => { nextCard(); playSound('click'); }}
-                                className="w-12 h-12 rounded-full bg-foreground/5 border border-foreground/10 flex items-center justify-center hover:bg-foreground/10 transition-colors"
-                            >
-                                <ArrowLeft className="w-5 h-5 text-foreground/60 rotate-180" />
-                            </button>
-                        </div>
+                        {/* Controls & Explanation */}
+                        <div className="space-y-6">
+                            {/* Control Bar */}
+                            <div className="flex flex-wrap items-center justify-center gap-4">
+                                <button
+                                    onClick={() => { prevCard(); playSound('click'); }}
+                                    className="w-12 h-12 rounded-2xl bg-card-bg border border-card-border flex items-center justify-center hover:bg-foreground/5 hover:-translate-y-1 transition-all"
+                                >
+                                    <ArrowLeft className="w-5 h-5 text-foreground" />
+                                </button>
 
-                        {/* Tags */}
-                        {currentCard.tags && currentCard.tags.length > 0 && (
-                            <div className="flex flex-wrap gap-2 justify-center mt-6">
-                                {currentCard.tags.map((tag: string, i: number) => (
-                                    <span key={i} className="text-xs px-3 py-1 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30">
-                                        {tag}
-                                    </span>
-                                ))}
+                                <button
+                                    onClick={() => { handleFlip(); playSound('click'); }}
+                                    className="px-8 py-3 rounded-2xl bg-gradient-to-r from-pink-500 to-rose-500 text-white font-bold hover:shadow-[0_4px_20px_rgba(236,72,153,0.4)] hover:-translate-y-1 transition-all flex items-center gap-2"
+                                >
+                                    <RefreshCw className="w-4 h-4" /> Flip Card
+                                </button>
+
+                                <button
+                                    onClick={() => { setShowExplanation(!showExplanation); playSound('click'); }}
+                                    className={`px-8 py-3 rounded-2xl font-bold hover:-translate-y-1 transition-all flex items-center gap-2 border ${showExplanation ? 'bg-green-500 text-white border-green-500 shadow-[0_4px_20px_rgba(34,197,94,0.4)]' : 'bg-card-bg text-green-400 border-green-500/30 hover:border-green-500'}`}
+                                >
+                                    <Brain className="w-4 h-4" /> Explain
+                                </button>
+
+                                <button
+                                    onClick={() => { nextCard(); playSound('click'); }}
+                                    className="w-12 h-12 rounded-2xl bg-card-bg border border-card-border flex items-center justify-center hover:bg-foreground/5 hover:-translate-y-1 transition-all"
+                                >
+                                    <ArrowLeft className="w-5 h-5 text-foreground rotate-180" />
+                                </button>
                             </div>
-                        )}
+
+                            <div className="flex justify-center">
+                                <button
+                                    onClick={() => { toggleBookmark(currentCard.id, currentCard.is_bookmarked); playSound('click'); }}
+                                    className={`flex items-center gap-2 px-6 py-2 rounded-full border transition-all ${currentCard.is_bookmarked ? 'bg-yellow-500/20 border-yellow-500/50 text-yellow-400' : 'bg-transparent border-transparent text-foreground/40 hover:text-foreground'}`}
+                                >
+                                    <Bookmark className={`w-4 h-4 ${currentCard.is_bookmarked ? 'fill-yellow-400' : ''}`} />
+                                    {currentCard.is_bookmarked ? 'Bookmarked' : 'Add to Bookmarks'}
+                                </button>
+                            </div>
+
+                            {/* Explanation Box */}
+                            <AnimatePresence>
+                                {showExplanation && (
+                                    <motion.div
+                                        initial={{ opacity: 0, y: -10, height: 0 }}
+                                        animate={{ opacity: 1, y: 0, height: 'auto' }}
+                                        exit={{ opacity: 0, y: -10, height: 0 }}
+                                        className="overflow-hidden"
+                                    >
+                                        <div className="p-6 rounded-2xl bg-green-500/10 border border-green-500/20 mt-4 text-center">
+                                            <h4 className="text-green-400 font-bold mb-2 flex items-center justify-center gap-2">
+                                                <Sparkles className="w-4 h-4" /> AI Explanation
+                                            </h4>
+                                            <p className="text-foreground/80 leading-relaxed">
+                                                {currentCard.explanation || "No advanced explanation available for this concept."}
+                                            </p>
+                                        </div>
+                                    </motion.div>
+                                )}
+                            </AnimatePresence>
+                        </div>
                     </>
                 )}
             </div>
