@@ -677,3 +677,260 @@ export async function generateInfographicAction(courseId: string, materialId: st
         return { success: false, error: error.message };
     }
 }
+
+// LEVEL 4: SONG GENERATOR ACTION (Suno API)
+const SUNO_API_URL = 'https://api.sunoapi.org/api/v1';
+const SUNO_POLL_INTERVAL = 5000; // 5 seconds
+const SUNO_MAX_POLL_ATTEMPTS = 60; // 5 minutes max
+
+export async function generateSong(courseId: string, style: string = 'Electronic Pop') {
+    const supabase = await createClient();
+
+    try {
+        // 1. Fetch course materials
+        const { data: materials, error: materialsError } = await supabase
+            .from('course_materials')
+            .select('id, title, content_url, type')
+            .eq('student_course_id', courseId)
+            .limit(3); // Limit to 3 PDFs for prompt generation
+
+        if (materialsError) throw new Error(materialsError.message);
+        if (!materials || materials.length === 0) {
+            return { success: false, error: "No materials found. Please upload PDFs first." };
+        }
+
+        // 2. Get course name for title
+        const { data: course } = await supabase
+            .from('student_courses')
+            .select('name')
+            .eq('id', courseId)
+            .single();
+
+        const courseName = course?.name || 'Educational';
+
+        // 3. Prepare content for Gemini
+        const parts: any[] = [];
+        for (const material of materials) {
+            if (material.content_url) {
+                try {
+                    const uploadedFile = await downloadAndUploadToGemini(
+                        supabase,
+                        material.content_url,
+                        material.title || 'document.pdf'
+                    );
+                    parts.push({
+                        fileData: {
+                            mimeType: uploadedFile.mimeType,
+                            fileUri: uploadedFile.uri,
+                        },
+                    });
+                } catch (err) {
+                    console.warn(`Skipping file ${material.title}:`, err);
+                }
+            }
+        }
+
+        if (parts.length === 0) {
+            return { success: false, error: "Could not process any materials." };
+        }
+
+        // 4. Generate music prompt with Gemini
+        const systemInstruction = `You are a creative music producer AI assistant. Your task is to analyze educational documents and create a short, compelling music generation prompt.
+
+CRITICAL RULES:
+1. Output ONLY the music prompt, nothing else
+2. Keep the prompt UNDER 500 characters total
+3. The prompt should describe what the song should be about
+4. Include the musical style: ${style}
+5. Mention key educational concepts from the document
+6. Describe the mood, energy, and vibe
+7. Do NOT write actual lyrics - just describe what the song should be about
+
+EXAMPLE OUTPUT:
+An upbeat ${style} song about photosynthesis and plant biology. Catchy melody with educational lyrics explaining how plants convert sunlight to energy. Energetic, fun, perfect for learning science. Include memorable hooks about chlorophyll and oxygen production.`;
+
+        const userPrompt = `Analyze these educational documents and create a music generation prompt in the ${style} style.
+
+The prompt should be UNDER 500 characters and describe what kind of song to generate based on the educational content.
+
+Output ONLY the prompt, no explanations.`;
+
+        parts.push({ text: userPrompt });
+
+        const geminiResult = await geminiVisionModel.generateContent({
+            contents: [{ role: 'user', parts }],
+            systemInstruction: { role: 'user', parts: [{ text: systemInstruction }] },
+            generationConfig: { temperature: 0.8, maxOutputTokens: 200 },
+        });
+
+        let musicPrompt = geminiResult.response.text().trim();
+        if (musicPrompt.length > 500) {
+            musicPrompt = musicPrompt.slice(0, 497) + '...';
+        }
+
+        console.log('Generated music prompt:', musicPrompt);
+
+        // 5. Call Suno API to generate music
+        const sunoApiKey = process.env.SUNO_API_KEY;
+        if (!sunoApiKey) {
+            return { success: false, error: "Suno API key not configured." };
+        }
+
+        const generateResponse = await fetch(`${SUNO_API_URL}/generate`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${sunoApiKey}`,
+            },
+            body: JSON.stringify({
+                prompt: musicPrompt,
+                customMode: false,
+                instrumental: false,
+                model: 'V4',
+                callBackUrl: 'https://example.com/callback', // Required by API but we use polling
+            }),
+        });
+
+        if (!generateResponse.ok) {
+            const errorText = await generateResponse.text();
+            throw new Error(`Suno API error: ${generateResponse.status} - ${errorText}`);
+        }
+
+        const generateData = await generateResponse.json();
+        console.log('Suno generation response:', generateData);
+
+        // Check for success code
+        if (generateData.code && generateData.code !== 200) {
+            throw new Error(`Suno API Error (${generateData.code}): ${generateData.msg}`);
+        }
+
+        // Extract taskId from the response structure shown in docs
+        const taskId = generateData.data?.taskId;
+        if (!taskId) {
+            throw new Error('No task ID returned from Suno API');
+        }
+
+        // 6. Poll for completion
+        let attempts = 0;
+        while (attempts < SUNO_MAX_POLL_ATTEMPTS) {
+            await new Promise(resolve => setTimeout(resolve, SUNO_POLL_INTERVAL));
+
+            let statusResponse;
+            try {
+                statusResponse = await fetch(
+                    `${SUNO_API_URL}/generate/record-info?taskId=${taskId}`,
+                    {
+                        method: 'GET',
+                        headers: { 'Authorization': `Bearer ${sunoApiKey}` },
+                    }
+                );
+            } catch (err) {
+                console.warn(`Polling network error (attempt ${attempts}):`, err);
+                attempts++;
+                continue;
+            }
+
+            if (!statusResponse.ok) {
+                attempts++;
+                continue;
+            }
+
+            const statusData = await statusResponse.json();
+            console.log('Suno status check:', JSON.stringify(statusData, null, 2)); // improved logging
+
+            // Handle API wrapping structure if present
+            const innerData = statusData.data || statusData;
+            const status = (innerData.status || statusData.status || '').toLowerCase();
+
+            // Check if generation is complete
+            if (status === 'complete' || status === 'success') {
+                const sunoData = innerData.response?.sunoData || innerData.sunoData || innerData.data || innerData;
+
+                if (Array.isArray(sunoData) && sunoData.length > 0) {
+                    const song = sunoData[0];
+
+                    // Prefer stream URL (fastest), then check for audioUrl if it's not empty, then sourceAudioUrl
+                    const audioUrl = song.streamAudioUrl ||
+                        (song.audioUrl && song.audioUrl !== "" ? song.audioUrl : null) ||
+                        song.sourceAudioUrl ||
+                        song.stream_audio_url ||
+                        song.audio_url ||
+                        song.audio_url_large;
+
+                    if (!audioUrl) {
+                        console.error('Full song object:', song); // debug log
+                        throw new Error('No audio URL in response');
+                    }
+
+                    const songTitle = song.title || `${courseName} - ${style} Mix`;
+                    const coverUrl = song.imageUrl || song.image_large_url || song.image_url;
+
+                    // 7. Save to database
+                    const { error: insertError } = await supabase
+                        .from('generated_songs')
+                        .insert({
+                            student_course_id: courseId,
+                            title: songTitle,
+                            audio_url: audioUrl,
+                            cover_url: coverUrl,
+                            style: style,
+                            prompt: musicPrompt,
+                        });
+
+                    if (insertError) console.error('Failed to save song:', insertError);
+
+                    return {
+                        success: true,
+                        data: {
+                            title: songTitle,
+                            audioUrl: audioUrl,
+                            coverUrl: coverUrl,
+                        },
+                    };
+                }
+            }
+
+            if (status === 'failed' || status === 'error') {
+                throw new Error(`Suno generation failed: ${innerData.errorMessage || 'Unknown error'}`);
+            }
+
+            // Check for streaming result
+            const sunoData = innerData.response?.sunoData || innerData.sunoData;
+            if (sunoData && sunoData.length > 0) {
+                const song = sunoData[0];
+                if (song.status === 'streaming' || song.status === 'complete') {
+                    const audioUrl = song.stream_audio_url || song.audio_url;
+                    if (audioUrl) {
+                        const songTitle = song.title || `${courseName} - ${style} Mix`;
+
+                        await supabase.from('generated_songs').insert({
+                            student_course_id: courseId,
+                            title: songTitle,
+                            audio_url: audioUrl,
+                            cover_url: song.image_large_url || song.image_url,
+                            style: style,
+                            prompt: musicPrompt,
+                        });
+
+                        return {
+                            success: true,
+                            data: {
+                                title: songTitle,
+                                audioUrl: audioUrl,
+                                coverUrl: song.image_large_url || song.image_url,
+                            },
+                        };
+                    }
+                }
+            }
+
+            attempts++;
+        }
+
+        return { success: false, error: 'Song generation timed out. Please try again.' };
+
+    } catch (error: any) {
+        console.error("Song Generation Error:", error);
+        return { success: false, error: error.message };
+    }
+}

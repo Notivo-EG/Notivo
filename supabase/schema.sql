@@ -170,3 +170,25 @@ create policy "Users can view own videos" on video_recommendations for select us
 create policy "Users can manage own videos" on video_recommendations for all using (
   exists (select 1 from student_courses sc join enrollments e on sc.enrollment_id = e.id where sc.id = video_recommendations.student_course_id and e.user_id = auth.uid())
 );
+
+-- 9. GENERATED SONGS (Educational Music)
+create table generated_songs (
+  id uuid default uuid_generate_v4() primary key,
+  student_course_id uuid references student_courses(id) on delete cascade not null,
+  title text,
+  audio_url text not null,
+  cover_url text,
+  style text default 'Electronic Pop',
+  prompt text,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+-- RLS for Generated Songs
+alter table generated_songs enable row level security;
+
+create policy "Users can view own songs" on generated_songs for select using (
+  exists (select 1 from student_courses sc join enrollments e on sc.enrollment_id = e.id where sc.id = generated_songs.student_course_id and e.user_id = auth.uid())
+);
+create policy "Users can manage own songs" on generated_songs for all using (
+  exists (select 1 from student_courses sc join enrollments e on sc.enrollment_id = e.id where sc.id = generated_songs.student_course_id and e.user_id = auth.uid())
+);
