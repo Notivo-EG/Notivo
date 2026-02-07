@@ -849,10 +849,10 @@ Output ONLY the prompt, no explanations.`;
                 if (Array.isArray(sunoData) && sunoData.length > 0) {
                     const song = sunoData[0];
 
-                    // Prefer stream URL (fastest), then check for audioUrl if it's not empty, then sourceAudioUrl
-                    const audioUrl = song.streamAudioUrl ||
+                    // Prefer sourceAudioUrl (CDN link) as it is more persistent than stream/temp URLs
+                    const audioUrl = song.sourceAudioUrl ||
                         (song.audioUrl && song.audioUrl !== "" ? song.audioUrl : null) ||
-                        song.sourceAudioUrl ||
+                        song.streamAudioUrl ||
                         song.stream_audio_url ||
                         song.audio_url ||
                         song.audio_url_large;
