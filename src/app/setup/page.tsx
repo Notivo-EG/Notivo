@@ -2,7 +2,7 @@
 
 import { motion } from "framer-motion";
 import { GraduationCap, Building2, ArrowRight, Search, Loader2 } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
@@ -27,6 +27,14 @@ const MAJORS = [
 ];
 
 export default function MajorSetupPage() {
+    return (
+        <Suspense fallback={<div className="min-h-screen bg-black" />}>
+            <MajorSetupContent />
+        </Suspense>
+    );
+}
+
+function MajorSetupContent() {
     const router = useRouter();
     const searchParams = useSearchParams();
     const newEnrollment = searchParams.get("new") === "true";
