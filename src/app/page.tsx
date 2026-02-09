@@ -21,7 +21,7 @@ export default function LandingPage() {
 
   const interfaceRotate = useTransform(mockupProgress, [0.15, 0.75], [90, 0]);
   const interfaceScale = useTransform(mockupProgress, [0.15, 0.75], [0.75, 1]);
-  const interfaceY = useTransform(mockupProgress, [0.15, 0.65], [600, 0]);
+  const interfaceY = useTransform(mockupProgress, [0.15, 0.65], [400, 0]);
   const interfaceOpacity = useTransform(mockupProgress, [0.1, 0.18], [0, 1]);
 
   // Semicircle curtains — start immediately, finish by 25%
@@ -128,7 +128,7 @@ export default function LandingPage() {
         <div className="sticky top-0 h-screen w-full">
 
           {/* Hero content — centered */}
-          <div className="relative z-10 flex flex-col items-center justify-start pt-0 px-6 w-full md:w-3/4 max-w-7xl mx-auto">
+          <div className="relative z-10 flex flex-col items-center pt-0 px-6 w-full md:w-3/4 max-w-7xl mx-auto h-full">
 
             {/* Top Navigation */}
             <nav className="w-full flex justify-between items-center py-6 mb-8 text-xs md:text-sm font-medium text-white/60">
@@ -150,14 +150,14 @@ export default function LandingPage() {
 
             <motion.div
               style={{ opacity: heroOpacity, scale: heroScale, y: heroY }}
-              className="flex flex-col items-center text-center w-full"
+              className="flex flex-col items-center text-center w-full my-auto md:my-0"
             >
               {/* Headline */}
               <motion.h1
                 initial={{ opacity: 0, y: 30 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.8, delay: 0.1, ease: "easeOut" }}
-                className="mt-[7%] text-4xl md:text-7xl lg:text-8xl font-bold tracking-tight max-w-5xl leading-[1.1] text-white drop-shadow-2xl"
+                className="mt-0 md:mt-[7%] text-4xl md:text-7xl lg:text-8xl font-bold tracking-tight max-w-5xl leading-[1.1] text-white drop-shadow-2xl"
               >
                 Everything App
                 <br />
@@ -226,9 +226,9 @@ export default function LandingPage() {
                PHONE MOCKUP (Visible on mobile only)
                -------------------------------------------
             */}
-            <div className="block md:hidden relative mx-auto w-[280px] rounded-[2.5rem] border-8 border-[#1a1a1a] shadow-2xl overflow-hidden ring-1 ring-white/10">
+            <div className="block md:hidden relative mx-auto w-[220px] rounded-[2rem] border-[6px] border-[#1a1a1a] shadow-2xl overflow-hidden ring-1 ring-white/10">
               {/* Phone Notch/Island */}
-              <div className="absolute top-0 left-1/2 -translate-x-1/2 w-24 h-6 bg-[#1a1a1a] rounded-b-xl z-20" />
+              <div className="absolute top-0 left-1/2 -translate-x-1/2 w-20 h-5 bg-[#1a1a1a] rounded-b-lg z-20" />
               <Image
                 src="/mockup-screenshot-mobile.png"
                 alt="Notiva mobile interface"
@@ -240,9 +240,9 @@ export default function LandingPage() {
               />
               {/* Glass Sheen */}
               <div className="absolute inset-0 bg-gradient-to-tr from-white/5 to-transparent pointer-events-none" />
+              {/* Bottom fade for clean edge */}
+              <div className="absolute bottom-0 left-0 right-0 h-24 bg-gradient-to-t from-[#1a1a1a] to-transparent pointer-events-none z-10" />
             </div>
-
-            {/* Removed bottom fade as requested */}
           </motion.div>
           </div>
 
@@ -263,7 +263,7 @@ export default function LandingPage() {
               {[
                 { value: "6", label: "AI-Powered Tools" },
                 { value: "∞", label: "Ways to Learn" },
-                { value: "<10s", label: "Generation Time" },
+                { value: "Short", label: "Generation Time" },
                 { value: "1", label: "Upload Needed" },
               ].map((stat, i) => (
                 <motion.div
