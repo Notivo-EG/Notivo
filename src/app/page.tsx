@@ -207,72 +207,16 @@ export default function LandingPage() {
                DESKTOP MOCKUP (Visible on md+)
                -------------------------------------------
             */}
-            <div className="hidden md:block relative w-full rounded-t-2xl border-t border-x border-white/10 bg-[#0a0a0a] shadow-2xl overflow-hidden aspect-[16/9] group">
-              {/* Mockup Top Bar */}
-              <div className="h-10 border-b border-white/5 bg-white/5 flex items-center px-4 gap-2">
-                <div className="flex gap-1.5">
-                  <div className="w-3 h-3 rounded-full bg-white/20" />
-                  <div className="w-3 h-3 rounded-full bg-white/20" />
-                  <div className="w-3 h-3 rounded-full bg-white/20" />
-                </div>
-              </div>
-
-              {/* Inner Content Placeholder */}
-              <div className="p-8 grid grid-cols-12 gap-6 h-full text-left">
-                {/* Sidebar Mock */}
-                <div className="col-span-3 border-r border-white/5 pr-6 space-y-4">
-                  <div className="h-8 w-3/4 bg-white/10 rounded mb-6" />
-                  <div className="space-y-2">
-                    {[1, 2, 3, 4, 5].map(i => (
-                      <div key={i} className="h-6 w-full bg-white/5 rounded" />
-                    ))}
-                  </div>
-                </div>
-
-                {/* Kanban Board Mock */}
-                <div className="col-span-9">
-                  <div className="flex justify-between items-center mb-8">
-                    <div className="h-10 w-1/3 bg-white/10 rounded" />
-                    <div className="flex gap-2">
-                      <div className="h-8 w-8 rounded-full bg-purple-500/20" />
-                      <div className="h-8 w-8 rounded-full bg-blue-500/20" />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-3 gap-4">
-                    {/* Column 1 */}
-                    <div className="space-y-3">
-                      <div className="flex items-center gap-2 text-xs text-white/40 mb-2 font-mono">BACKLOG 12</div>
-                      <div className="h-32 bg-white/5 rounded border border-white/5 p-4 relative overflow-hidden">
-                        <div className="absolute top-0 left-0 w-1 bg-purple-500 h-full" />
-                        <div className="h-4 w-3/4 bg-white/10 rounded mb-2" />
-                        <div className="h-3 w-1/2 bg-white/5 rounded" />
-                      </div>
-                      <div className="h-24 bg-white/5 rounded border border-white/5 p-4 relative">
-                        <div className="absolute top-0 left-0 w-1 bg-blue-500 h-full" />
-                      </div>
-                    </div>
-
-                    {/* Column 2 */}
-                    <div className="space-y-3">
-                      <div className="flex items-center gap-2 text-xs text-white/40 mb-2 font-mono">IN PROGRESS 3</div>
-                      <div className="h-40 bg-white/5 rounded border border-white/5 p-4 relative overflow-hidden ring-1 ring-beam-glow/30">
-                        <div className="absolute top-0 left-0 w-1 bg-beam-glow h-full" />
-                        <div className="h-4 w-2/3 bg-white/10 rounded mb-3" />
-                        <div className="h-20 w-full bg-gradient-to-br from-beam-glow/10 to-transparent rounded" />
-                      </div>
-                    </div>
-
-                    {/* Column 3 */}
-                    <div className="space-y-3">
-                      <div className="flex items-center gap-2 text-xs text-white/40 mb-2 font-mono">DONE 24</div>
-                      <div className="h-28 bg-white/5 rounded border border-white/5 opacity-50" />
-                      <div className="h-28 bg-white/5 rounded border border-white/5 opacity-50" />
-                    </div>
-                  </div>
-                </div>
-              </div>
-
+            <div className="hidden md:block relative w-full rounded-t-2xl border-t border-x border-white/10 shadow-2xl overflow-hidden">
+              <Image
+                src="/mockup-screenshot.png"
+                alt="Notiva course interface"
+                width={1920}
+                height={1080}
+                className="w-full h-auto block"
+                draggable={false}
+                priority
+              />
               {/* Glass sheen overlay */}
               <div className="absolute inset-0 bg-gradient-to-tr from-white/5 to-transparent pointer-events-none" />
             </div>
@@ -282,38 +226,18 @@ export default function LandingPage() {
                PHONE MOCKUP (Visible on mobile only)
                -------------------------------------------
             */}
-            <div className="block md:hidden relative w-[280px] h-[580px] rounded-[2.5rem] border-8 border-[#1a1a1a] bg-[#0a0a0a] shadow-2xl overflow-hidden ring-1 ring-white/10">
+            <div className="block md:hidden relative mx-auto w-[280px] rounded-[2.5rem] border-8 border-[#1a1a1a] shadow-2xl overflow-hidden ring-1 ring-white/10">
               {/* Phone Notch/Island */}
               <div className="absolute top-0 left-1/2 -translate-x-1/2 w-24 h-6 bg-[#1a1a1a] rounded-b-xl z-20" />
-
-              {/* Mobile UI Content */}
-              <div className="pt-10 px-5 h-full flex flex-col gap-4">
-                {/* Header */}
-                <div className="flex justify-between items-center mb-2">
-                  <div className="h-3 w-3 rounded-full bg-white/20" />
-                  <div className="h-2 w-20 bg-white/10 rounded-full" />
-                  <div className="h-3 w-3 rounded-full bg-white/20" />
-                </div>
-
-                {/* Card 1 (Active) */}
-                <div className="w-full h-32 rounded-2xl bg-white/5 border border-white/5 p-4 relative overflow-hidden">
-                  <div className="absolute top-0 left-0 w-1 bg-beam-glow h-full" />
-                  <div className="h-4 w-24 bg-white/10 rounded mb-3" />
-                  <div className="h-14 w-full bg-gradient-to-br from-beam-glow/10 to-transparent rounded-lg" />
-                </div>
-
-                {/* Card 2 */}
-                <div className="w-full h-24 rounded-2xl bg-white/5 border border-white/5 p-4 relative opacity-70">
-                  <div className="absolute top-0 left-0 w-1 bg-purple-500 h-full" />
-                  <div className="h-4 w-20 bg-white/10 rounded mb-3" />
-                </div>
-
-                {/* Card 3 */}
-                <div className="w-full h-24 rounded-2xl bg-white/5 border border-white/5 p-4 relative opacity-40">
-                  <div className="absolute top-0 left-0 w-1 bg-blue-500 h-full" />
-                </div>
-              </div>
-
+              <Image
+                src="/mockup-screenshot-mobile.png"
+                alt="Notiva mobile interface"
+                width={430}
+                height={932}
+                className="w-full h-auto block"
+                draggable={false}
+                priority
+              />
               {/* Glass Sheen */}
               <div className="absolute inset-0 bg-gradient-to-tr from-white/5 to-transparent pointer-events-none" />
             </div>

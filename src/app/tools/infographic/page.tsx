@@ -35,13 +35,12 @@ export default function Home() {
 
   const {
     infographics,
-    searchQuery,
-    setSearchQuery,
-    sortBy,
-    setSortBy,
     addInfographic,
     removeInfographic,
   } = useInfographics();
+
+  const [searchQuery, setSearchQuery] = useState('');
+  const [sortBy, setSortBy] = useState<'date' | 'name'>('date');
 
   const [generationState, setGenerationState] = useState<GenerationState>({
     status: 'idle',

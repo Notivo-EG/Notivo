@@ -110,15 +110,15 @@ export function VideoTutorTab({ courseId }: VideoTutorTabProps) {
         return `${mins}:${secs.toString().padStart(2, '0')}`;
     };
 
-    const saveVideoToDatabase = async (jobId: string, materialTitles: string[], sourceIndexes: number[]) => {
-        const videoUrl = `${VIDEO_API_URL}/api/video/${jobId}`;
+    const saveVideoToDatabase = async (jobId: string, materialTitles: string[], sourceIndexes: number[], videoUrl?: string) => {
+        const finalUrl = videoUrl || `${VIDEO_API_URL}/api/video/${jobId}`;
         const { data } = await supabase
             .from('generated_videos')
             .insert({
                 student_course_id: courseId,
                 job_id: jobId,
                 title: `Video - ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()}`,
-                video_url: videoUrl,
+                video_url: finalUrl,
                 status: 'completed',
                 config: { voice, voiceStyle, detailLevel, maxDuration },
                 source_materials: materialTitles.map((title, i) => ({ title, index: sourceIndexes[i] }))
@@ -245,7 +245,8 @@ export function VideoTutorTab({ courseId }: VideoTutorTabProps) {
                 eventSource.close();
                 if (data.status === 'completed') {
                     updateTask(taskId, { status: 'completed', progress: 100, message: 'Video ready!' });
-                    await saveVideoToDatabase(id, materialTitles, sourceIndexes);
+                    // Prefer Supabase video_url when deployed to Cloud Run
+                    await saveVideoToDatabase(id, materialTitles, sourceIndexes, data.video_url);
                 } else if (data.status === 'failed') {
                     setError(data.error || 'Video generation failed');
                     updateTask(taskId, { status: 'failed', message: data.error || 'Generation failed' });

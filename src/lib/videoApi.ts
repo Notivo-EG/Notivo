@@ -7,6 +7,7 @@ export interface VideoJob {
     current_stage: string;
     error_message?: string;
     output_path?: string;
+    video_url?: string;  // Supabase public URL (used when deployed)
     created_at: string;
 }
 
@@ -70,6 +71,15 @@ export async function getVideoStatus(jobId: string): Promise<VideoJob> {
     return await response.json();
 }
 
-export function getVideoDownloadUrl(jobId: string) {
+export async function getVideoDownloadUrl(jobId: string): Promise<string> {
+    // First try to get the video URL from job status (Supabase URL when deployed)
+    try {
+        const job = await getVideoStatus(jobId);
+        if (job.video_url) {
+            return job.video_url;
+        }
+    } catch {
+        // fall through to local URL
+    }
     return `${VIDEO_API_URL}/api/video/${jobId}`;
 }
