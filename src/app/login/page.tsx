@@ -1,7 +1,7 @@
 "use client";
 
-import { motion } from "framer-motion";
-import { ArrowLeft, Mail, Lock, Eye, EyeOff } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import { Mail, Lock, Eye, EyeOff, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
@@ -15,6 +15,7 @@ export default function LoginPage() {
     const [password, setPassword] = useState("");
 
     const [loading, setLoading] = useState(false);
+    const [redirecting, setRedirecting] = useState(false);
     const router = useRouter();
     const supabase = createClient();
     const { playSound } = usePreferences();
@@ -34,12 +35,30 @@ export default function LoginPage() {
                 return;
             }
 
-            // Successful login -> Redirect to setup (which handles redirection if already setup) or dashboard
-            // Ideally check if user has enrollments, but for now /setup is safe as it's the gateway
-            router.push("/setup");
+            // Show loading screen while checking enrollments
+            setRedirecting(true);
+
+            const { data: { user } } = await supabase.auth.getUser();
+
+            if (user) {
+                const { data: enrollments } = await supabase
+                    .from('enrollments')
+                    .select('id')
+                    .eq('user_id', user.id)
+                    .limit(1);
+
+                if (enrollments && enrollments.length > 0) {
+                    router.push("/dashboard");
+                } else {
+                    router.push("/setup");
+                }
+            } else {
+                router.push("/setup");
+            }
         } catch (err) {
             console.error("Login failed", err);
             alert("Something went wrong");
+            setRedirecting(false);
         } finally {
             setLoading(false);
         }
@@ -47,6 +66,21 @@ export default function LoginPage() {
 
     return (
         <div className="min-h-screen bg-background flex flex-col items-center justify-center px-6 relative overflow-hidden selection:bg-sky-500/30">
+            {/* Full-screen loading overlay while checking enrollments */}
+            <AnimatePresence>
+                {redirecting && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-background/90 backdrop-blur-md"
+                    >
+                        <Loader2 className="w-10 h-10 text-cyan-400 animate-spin mb-4" />
+                        <p className="text-white/70 text-lg font-medium">Signing you in...</p>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
             {/* 
               =============================================
               FULL-SCREEN GLOWING LIGHT BACKGROUND 

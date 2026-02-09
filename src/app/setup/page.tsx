@@ -3,7 +3,7 @@
 import { motion } from "framer-motion";
 import { GraduationCap, Building2, ArrowRight, Search, Loader2 } from "lucide-react";
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
 const UNIVERSITIES = [
@@ -28,6 +28,8 @@ const MAJORS = [
 
 export default function MajorSetupPage() {
     const router = useRouter();
+    const searchParams = useSearchParams();
+    const newEnrollment = searchParams.get("new") === "true";
     const supabase = createClient();
 
     const [step, setStep] = useState<1 | 2>(1);
@@ -63,13 +65,13 @@ export default function MajorSetupPage() {
                 .eq('user_id', user.id)
                 .limit(1);
 
-            if (enrollments && enrollments.length > 0) {
-                // User already has an enrollment, skip setup and go to dashboard
+            if (enrollments && enrollments.length > 0 && !newEnrollment) {
+                // User already has an enrollment and is not editing, skip setup and go to dashboard
                 router.push("/dashboard");
             }
         };
         checkUser();
-    }, [router, supabase, supabase.auth]);
+    }, [router, supabase, supabase.auth, newEnrollment]);
 
     const handleContinue = async () => {
         if (step === 1 && university) {
@@ -204,7 +206,7 @@ export default function MajorSetupPage() {
                                         className="w-full p-4 rounded-xl text-left transition-all border bg-white/5 border-dashed border-white/20 text-white/60 hover:text-white hover:border-blue-500/50 hover:bg-blue-500/10"
                                     >
                                         <span className="block text-sm">Not found? Use:</span>
-                                        <span className="font-bold text-blue-400">"{universitySearch}"</span>
+                                        <span className="font-bold text-blue-400">&quot;{universitySearch}&quot;</span>
                                     </button>
                                 )}
                             </div>
@@ -255,7 +257,7 @@ export default function MajorSetupPage() {
                                         className="w-full p-4 rounded-xl text-left transition-all border bg-white/5 border-dashed border-white/20 text-white/60 hover:text-white hover:border-cyan-500/50 hover:bg-cyan-500/10"
                                     >
                                         <span className="block text-sm">Not found? Use:</span>
-                                        <span className="font-bold text-cyan-400">"{majorSearch}"</span>
+                                        <span className="font-bold text-cyan-400">&quot;{majorSearch}&quot;</span>
                                     </button>
                                 )}
                             </div>

@@ -167,7 +167,7 @@ export default function SignupPage() {
                             whileHover={{ scale: 1.02 }}
                             whileTap={{ scale: 0.98 }}
                             type="submit"
-                            onClick={() => playSound('click')}
+                            onClick={() => {playSound('click')}}
                             className="relative group w-full mt-4 py-4 rounded-full font-bold text-lg text-white overflow-hidden transition-all hover:brightness-125 hover:shadow-[0_0_30px_rgba(59,130,246,0.4)] active:scale-95 border border-white/10 bg-gradient-to-r from-blue-500/80 via-indigo-500/80 to-purple-500/80 backdrop-blur-md"
                         >
                             <div className="absolute inset-0 rounded-full shadow-[inset_0_1px_0_rgba(255,255,255,0.2)] pointer-events-none" />
