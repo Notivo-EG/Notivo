@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { usePreferences } from "@/context/PreferencesContext";
 import { FileUpload } from "@/components/FileUpload";
 import { BookOpen, Layers, FileText, Loader2, Save, Upload, CheckCircle2, Trash2, ChevronDown, ChevronRight, GraduationCap, FlaskConical, ScrollText, FileSpreadsheet, Notebook, BookMarked, ClipboardList } from "lucide-react";
-import { uploadBrainMaterial } from "@/app/actions";
+import { analyzeBrainMaterial, deleteBrainMaterial } from "@/app/actions";
 
 // Category configuration with icons and display names
 const CATEGORY_CONFIG: Record<string, { label: string; icon: React.ComponentType<any>; color: string }> = {
@@ -60,10 +60,24 @@ export function ContentEngineTab({ courseId }: { courseId: string }) {
     const handleUpload = async (file: File) => {
         setIsUploading(true);
         try {
-            const formData = new FormData();
-            formData.append("file", file);
+            // 1. Upload directly to Supabase Storage from the client
+            //    This avoids Vercel's 4.5MB serverless function payload limit
+            const storagePath = `${courseId}/${Date.now()}_${file.name}`;
+            const { error: uploadError } = await supabase
+                .storage
+                .from('materials')
+                .upload(storagePath, file);
 
-            const result = await uploadBrainMaterial(formData, courseId);
+            if (uploadError) throw new Error(`Storage upload failed: ${uploadError.message}`);
+
+            // 2. Call server action with just the path (no large file payload)
+            const result = await analyzeBrainMaterial({
+                courseId,
+                fileName: file.name,
+                mimeType: file.type || "application/pdf",
+                storagePath,
+            });
+
             if (result.success) {
                 // Refresh list
                 const { data } = await supabase
@@ -79,6 +93,8 @@ export function ContentEngineTab({ courseId }: { courseId: string }) {
                     }
                 }
             } else {
+                // Clean up storage if analysis failed
+                await supabase.storage.from('materials').remove([storagePath]);
                 throw new Error(result.error);
             }
         } catch (error: any) {
@@ -93,33 +109,13 @@ export function ContentEngineTab({ courseId }: { courseId: string }) {
         e.stopPropagation();
         if (!confirm("Delete this material? This will remove it from the knowledge base.")) return;
 
-        // Find the material to get its storage path
-        const material = materials.find(m => m.id === id);
+        // Use server action to delete (bypasses RLS issues with client-side delete)
+        const result = await deleteBrainMaterial(id);
 
-        // Delete from storage if content_url exists
-        if (material?.content_url) {
-            try {
-                // Extract storage path from the public URL
-                const url = new URL(material.content_url);
-                const pathMatch = url.pathname.match(/\/storage\/v1\/object\/public\/materials\/(.+)/);
-                if (pathMatch) {
-                    await supabase.storage.from('materials').remove([pathMatch[1]]);
-                }
-            } catch (err) {
-                console.error("Failed to delete file from storage:", err);
-            }
-        }
-
-        // Delete from database
-        const { error } = await supabase
-            .from('course_materials')
-            .delete()
-            .eq('id', id);
-
-        if (!error) {
+        if (result.success) {
             setMaterials(prev => prev.filter(m => m.id !== id));
         } else {
-            console.error(error);
+            console.error(result.error);
             alert("Failed to delete material");
         }
     };

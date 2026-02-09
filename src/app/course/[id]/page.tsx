@@ -41,7 +41,7 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { FileUpload } from "@/components/FileUpload";
-import { parseCourseTree, uploadBrainMaterial, generateSong } from "@/app/actions";
+import { parseCourseTree, generateSong } from "@/app/actions";
 import { usePreferences } from "@/context/PreferencesContext";
 import { CourseInfographicTab } from "@/components/infographic/CourseInfographicTab";
 import { SongsTab } from '@/components/course/ui/SongsTab';

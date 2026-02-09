@@ -199,42 +199,82 @@ const MATERIAL_CATEGORIES = [
 type MaterialCategory = typeof MATERIAL_CATEGORIES[number];
 
 export async function uploadBrainMaterial(formData: FormData, courseId: string) {
+    // Legacy wrapper - kept for backwards compatibility
+    const file = formData.get("file") as File;
+    if (!file) return { success: false, error: "No file provided" };
+
+    // Convert file to base64 and call the new function
+    const arrayBuffer = await file.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+    const base64 = buffer.toString("base64");
+
+    return analyzeBrainMaterial({
+        courseId,
+        fileName: file.name,
+        mimeType: file.type || "application/pdf",
+        fileBase64: base64,
+    });
+}
+
+// New: Analyze material that's already uploaded to Supabase Storage
+// Client uploads directly to storage, then calls this with the path
+export async function analyzeBrainMaterial(input: {
+    courseId: string;
+    fileName: string;
+    mimeType: string;
+    storagePath?: string;   // If file was uploaded client-side to storage
+    fileBase64?: string;    // If file is sent directly (legacy/small files)
+}) {
     const supabase = await createClient();
 
     try {
-        const file = formData.get("file") as File;
-
-        if (!file) throw new Error("No file provided");
+        const { courseId, fileName, mimeType, storagePath, fileBase64 } = input;
         if (!courseId) throw new Error("No course ID provided");
+        if (!storagePath && !fileBase64) throw new Error("No file data provided");
 
-        console.log(`Uploading: ${file.name} for course ${courseId}`);
+        console.log(`Processing: ${fileName} for course ${courseId}`);
 
-        // 1. Upload to Supabase Storage
-        const filePath = `${courseId}/${Date.now()}_${file.name}`;
-        const { data: uploadData, error: uploadError } = await supabase
-            .storage
-            .from('materials')
-            .upload(filePath, file);
+        let publicUrl: string;
+        let finalStoragePath: string;
 
-        if (uploadError) throw uploadError;
+        if (storagePath) {
+            // File was already uploaded to storage by the client
+            finalStoragePath = storagePath;
+            const { data: { publicUrl: url } } = supabase
+                .storage
+                .from('materials')
+                .getPublicUrl(storagePath);
+            publicUrl = url;
+        } else if (fileBase64) {
+            // Legacy path: upload to storage server-side
+            finalStoragePath = `${courseId}/${Date.now()}_${fileName}`;
+            const fileBuffer = Buffer.from(fileBase64, "base64");
+            const { error: uploadError } = await supabase
+                .storage
+                .from('materials')
+                .upload(finalStoragePath, fileBuffer, { contentType: mimeType });
+            if (uploadError) throw uploadError;
 
-        // Get Public URL
-        const { data: { publicUrl } } = supabase
-            .storage
-            .from('materials')
-            .getPublicUrl(filePath);
+            const { data: { publicUrl: url } } = supabase
+                .storage
+                .from('materials')
+                .getPublicUrl(finalStoragePath);
+            publicUrl = url;
+        } else {
+            throw new Error("No file data provided");
+        }
 
-        // 2. Upload to Gemini for analysis
-        const uploadedFile = await uploadFileToGemini(file, file.type);
+        // Download file from storage and upload to Gemini for AI analysis
+        const { uri } = await downloadAndUploadToGemini(supabase, publicUrl, fileName, mimeType);
 
         const filePart = {
             fileData: {
-                mimeType: uploadedFile.mimeType,
-                fileUri: uploadedFile.uri
+                mimeType: mimeType,
+                fileUri: uri
             }
         };
 
-        // 3. AI Categorization - Classify the PDF type
+        // AI Categorization - Classify the PDF type
         const categoryPrompt = `
         Analyze this PDF document and classify it into exactly ONE of these categories:
         - lecture_slides: Presentation slides from lectures (PowerPoint exports, bullet-point heavy)
@@ -262,9 +302,9 @@ export async function uploadBrainMaterial(formData: FormData, courseId: string) 
             ? categoryData.category
             : 'notes';
 
-        console.log(`AI classified "${file.name}" as: ${detectedCategory} (confidence: ${categoryData.confidence})`);
+        console.log(`AI classified "${fileName}" as: ${detectedCategory} (confidence: ${categoryData.confidence})`);
 
-        // 4. Content Analysis - Generate summary based on category
+        // Content Analysis - Generate summary based on category
         let analysisPrompt = "";
         switch (detectedCategory) {
             case 'lecture_slides':
@@ -358,13 +398,13 @@ export async function uploadBrainMaterial(formData: FormData, courseId: string) 
         aiAnalysis.detected_category = detectedCategory;
         aiAnalysis.category_confidence = categoryData.confidence;
 
-        // 5. Save to Database with detected category
+        // Save to Database with detected category
         const { error: dbError } = await supabase
             .from('course_materials')
             .insert({
                 student_course_id: courseId,
                 type: detectedCategory,
-                title: file.name,
+                title: fileName,
                 content_url: publicUrl,
                 ai_summary: aiAnalysis,
                 week_number: aiAnalysis.week_number || null
@@ -376,6 +416,49 @@ export async function uploadBrainMaterial(formData: FormData, courseId: string) 
 
     } catch (error: any) {
         console.error("Upload Error:", error);
+        return { success: false, error: error.message };
+    }
+}
+
+// Server-side delete: bypasses RLS issues with client-side delete
+export async function deleteBrainMaterial(materialId: string) {
+    const supabase = await createClient();
+
+    try {
+        // 1. Fetch the material to get storage path
+        const { data: material, error: fetchError } = await supabase
+            .from('course_materials')
+            .select('id, content_url')
+            .eq('id', materialId)
+            .single();
+
+        if (fetchError) throw fetchError;
+        if (!material) throw new Error("Material not found");
+
+        // 2. Delete from storage
+        if (material.content_url) {
+            try {
+                const url = new URL(material.content_url);
+                const pathMatch = url.pathname.match(/\/storage\/v1\/object\/public\/materials\/(.+)/);
+                if (pathMatch) {
+                    await supabase.storage.from('materials').remove([pathMatch[1]]);
+                }
+            } catch (err) {
+                console.error("Failed to delete file from storage:", err);
+            }
+        }
+
+        // 3. Delete from database
+        const { error: deleteError } = await supabase
+            .from('course_materials')
+            .delete()
+            .eq('id', materialId);
+
+        if (deleteError) throw deleteError;
+
+        return { success: true };
+    } catch (error: any) {
+        console.error("Delete Error:", error);
         return { success: false, error: error.message };
     }
 }
