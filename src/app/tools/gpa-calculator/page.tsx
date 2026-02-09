@@ -44,7 +44,7 @@ export default function GPACalculator() {
     const gpa = totalCredits > 0 ? (totalPoints / totalCredits).toFixed(2) : "0.00";
 
     return (
-        <div className="min-h-screen bg-background px-6 py-12 relative overflow-hidden">
+        <div className="min-h-screen bg-background px-6 py-12 mt-20 md:mt-0 relative overflow-hidden">
             {/* Background Glow */}
             <div className="fixed left-0 top-0 w-[600px] h-[600px] rounded-full bg-gradient-to-br from-blue-600/10 via-purple-500/5 to-transparent blur-[150px] pointer-events-none" />
 

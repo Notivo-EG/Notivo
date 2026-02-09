@@ -51,7 +51,7 @@ export default function SettingsPage() {
     if (loading) return <div className="min-h-screen bg-background flex items-center justify-center text-foreground">Loading...</div>;
 
     return (
-        <div className="min-h-screen bg-background px-6 py-12 relative overflow-hidden text-foreground">
+        <div className="min-h-screen bg-background px-6 py-12 mt-20 md:mt-0 relative overflow-hidden text-foreground">
             {/* Background Glow - Adjusted for Themes */}
             <div className="fixed inset-0 pointer-events-none z-0">
                 <div className="absolute top-[-10%] right-[-10%] w-[50%] h-[50%] bg-blue-600/10 blur-[120px] rounded-full mix-blend-screen dark:mix-blend-normal" />

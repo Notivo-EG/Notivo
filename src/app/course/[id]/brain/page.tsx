@@ -12,7 +12,7 @@ export default function BrainPage() {
     const [activeTab, setActiveTab] = useState<'content' | 'flashcards' | 'videos' | 'extra'>('content');
 
     return (
-        <div className="min-h-screen bg-background px-6 py-12 relative overflow-hidden text-foreground">
+        <div className="min-h-screen bg-background px-6 py-12 mt-20 md:mt-0 relative overflow-hidden text-foreground">
             {/* Background Glow */}
             <div className="fixed right-0 top-0 w-[600px] h-[600px] rounded-full bg-purple-600/10 blur-[150px] pointer-events-none" />
 

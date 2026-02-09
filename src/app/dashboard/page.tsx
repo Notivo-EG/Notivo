@@ -197,7 +197,7 @@ export default function GlobalDashboard() {
     }, [supabase, router]);
 
     return (
-        <div className="min-h-screen bg-background px-6 py-8 md:px-12 md:py-12 relative overflow-hidden text-foreground">
+        <div className="min-h-screen bg-background px-6 py-8 md:px-12 md:py-12 mt-20 md:mt-0 relative overflow-hidden text-foreground">
             {/* Background Glow */}
             <div className="fixed inset-0 pointer-events-none z-0">
                 <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] bg-blue-600/10 blur-[120px] rounded-full mix-blend-screen dark:mix-blend-normal" />

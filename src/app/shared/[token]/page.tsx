@@ -131,7 +131,7 @@ export default function SharedCoursePage({
   };
 
   return (
-    <div className="min-h-screen bg-background px-6 py-12 relative overflow-hidden text-foreground">
+    <div className="min-h-screen bg-background px-6 py-12 mt-20 md:mt-0 relative overflow-hidden text-foreground">
       {/* Background Glow */}
       <div className="fixed left-1/2 top-1/4 -translate-x-1/2 w-[800px] h-[800px] rounded-full bg-gradient-to-br from-blue-600/10 via-purple-500/5 to-transparent blur-[150px] pointer-events-none" />
 

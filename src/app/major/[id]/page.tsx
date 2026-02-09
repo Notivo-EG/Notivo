@@ -288,7 +288,7 @@ export default function MajorPage() {
     const themeColor = enrollment?.ui_theme === 'purple' ? 'purple' : 'blue';
 
     return (
-        <div className="min-h-screen bg-background relative text-foreground px-6 py-12 overflow-hidden">
+        <div className="min-h-screen bg-background relative text-foreground px-6 py-12 mt-20 md:mt-0 overflow-hidden">
             <div className={`fixed left-1/2 top-1/4 -translate-x-1/2 w-[800px] h-[800px] rounded-full bg-gradient-to-br from-${themeColor}-600/10 via-${themeColor}-500/5 to-transparent blur-[150px] pointer-events-none`} />
 
             <div className="max-w-7xl mx-auto relative z-10">

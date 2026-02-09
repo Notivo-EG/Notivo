@@ -36,7 +36,7 @@ export default function WarRoomPage() {
     };
 
     return (
-        <div className="min-h-screen bg-background px-6 py-12 relative overflow-hidden">
+        <div className="min-h-screen bg-background px-6 py-12 mt-20 md:mt-0 relative overflow-hidden">
             {/* War Room Red Glow */}
             <div className="fixed left-0 top-0 w-full h-full bg-gradient-to-br from-caution/5 via-transparent to-transparent pointer-events-none" />
             <div className="fixed right-0 top-0 w-[500px] h-[500px] rounded-full bg-caution/10 blur-[150px] pointer-events-none" />
