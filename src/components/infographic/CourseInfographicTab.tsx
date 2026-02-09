@@ -17,7 +17,8 @@ interface CourseInfographicTabProps {
 
 export function CourseInfographicTab({ courseId }: CourseInfographicTabProps) {
     const supabase = createClient();
-    const { addInfographic, infographics, isLoading } = useInfographics(courseId);
+    const { addInfographic, infographics, isLoading, syncLocalData, hasLocalItems } = useInfographics(courseId);
+    const [isSyncing, setIsSyncing] = useState(false);
 
     // State
     const [materials, setMaterials] = useState<any[]>([]);
@@ -96,6 +97,27 @@ export function CourseInfographicTab({ courseId }: CourseInfographicTabProps) {
     // Filter infographics for this course
     const courseInfographics = infographics;
 
+    const handleSync = async () => {
+        setIsSyncing(true);
+        setStatusMessage("Syncing legacy infographics to database...");
+        try {
+            const count = await syncLocalData();
+            if (count > 0) {
+                setStatus('complete');
+                setStatusMessage(`Successfully synced ${count} infographics!`);
+                setTimeout(() => setStatus('idle'), 3000);
+            } else {
+                setStatusMessage("No new items to sync.");
+                setTimeout(() => setStatus('idle'), 2000);
+            }
+        } catch (e) {
+            setStatus('error');
+            setStatusMessage("Sync failed.");
+        } finally {
+            setIsSyncing(false);
+        }
+    };
+
     return (
         <div className="grid lg:grid-cols-3 gap-8">
             {/* LEFT: Material Selection & Controls */}
@@ -167,6 +189,32 @@ export function CourseInfographicTab({ courseId }: CourseInfographicTabProps) {
                         <p className="text-xs text-red-400 mt-2">{statusMessage}</p>
                     )}
                 </div>
+
+                {/* 3. Sync Legacy Data (Migration Helper) */}
+                {hasLocalItems && (
+                    <div className="bg-orange-500/10 border border-orange-500/20 rounded-2xl p-6 mt-4">
+                        <h3 className="text-sm font-bold text-orange-400 mb-2 flex items-center gap-2">
+                            ⚠️ Legacy Data Detected
+                        </h3>
+                        <p className="text-xs text-foreground/60 mb-3">
+                            Found infographics saved in this browser. Move them to the database to access them everywhere.
+                        </p>
+                        <button
+                            onClick={handleSync}
+                            disabled={isSyncing}
+                            className="w-full py-2 rounded-xl bg-orange-500/20 text-orange-400 text-xs font-bold hover:bg-orange-500/30 transition-all flex items-center justify-center gap-2"
+                        >
+                            {isSyncing ? (
+                                <>
+                                    <Loader2 className="w-3 h-3 animate-spin" />
+                                    Syncing...
+                                </>
+                            ) : (
+                                "Sync to Database"
+                            )}
+                        </button>
+                    </div>
+                )}
             </div>
 
             {/* RIGHT: Gallery */}
