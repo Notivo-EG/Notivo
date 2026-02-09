@@ -2,59 +2,73 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { Infographic } from '@/lib/types';
-import {
-    getInfographics,
-    saveInfographic,
-    deleteInfographic as deleteFromStorage,
-    searchInfographics,
-    sortInfographics,
-} from '@/lib/storage';
+import { infographicService } from '@/services/infographicService';
 
-type SortBy = 'date' | 'name';
-
-export function useInfographics() {
+export function useInfographics(courseId?: string) {
     const [infographics, setInfographics] = useState<Infographic[]>([]);
-    const [searchQuery, setSearchQuery] = useState('');
-    const [sortBy, setSortBy] = useState<SortBy>('date');
     const [isLoading, setIsLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
 
-    // Load infographics on mount
+    // Initial fetch
     useEffect(() => {
-        const stored = getInfographics();
-        setInfographics(stored);
-        setIsLoading(false);
-    }, []);
+        if (courseId) {
+            refresh();
+        } else {
+            setInfographics([]);
+            setIsLoading(false);
+        }
+    }, [courseId]);
 
-    // Filtered and sorted list
-    const filteredInfographics = sortInfographics(
-        searchQuery ? searchInfographics(searchQuery) : infographics,
-        sortBy
-    );
+    const refresh = useCallback(async () => {
+        if (!courseId) return;
+        setIsLoading(true);
+        try {
+            const data = await infographicService.getAll(courseId);
+            setInfographics(data);
+            setError(null);
+        } catch (err) {
+            console.error(err);
+            setError('Failed to load infographics');
+        } finally {
+            setIsLoading(false);
+        }
+    }, [courseId]);
 
-    const addInfographic = useCallback((infographic: Infographic) => {
-        saveInfographic(infographic);
+    const addInfographic = useCallback(async (infographic: Infographic) => {
+        // Optimistic update
         setInfographics(prev => [infographic, ...prev]);
+
+        try {
+            await infographicService.save(infographic);
+        } catch (err) {
+            console.error(err);
+            setError('Failed to save infographic');
+            // Rollback on error
+            setInfographics(prev => prev.filter(i => i.id !== infographic.id));
+        }
     }, []);
 
-    const removeInfographic = useCallback((id: string) => {
-        deleteFromStorage(id);
+    const removeInfographic = useCallback(async (id: string) => {
+        // Optimistic update
+        const previousState = [...infographics];
         setInfographics(prev => prev.filter(item => item.id !== id));
-    }, []);
 
-    const refreshInfographics = useCallback(() => {
-        setInfographics(getInfographics());
-    }, []);
+        try {
+            await infographicService.delete(id);
+        } catch (err) {
+            console.error(err);
+            setError('Failed to delete infographic');
+            // Rollback
+            setInfographics(previousState);
+        }
+    }, [infographics]);
 
     return {
-        infographics: filteredInfographics,
-        allInfographics: infographics,
-        searchQuery,
-        setSearchQuery,
-        sortBy,
-        setSortBy,
+        infographics,
+        isLoading,
+        error,
         addInfographic,
         removeInfographic,
-        refreshInfographics,
-        isLoading,
+        refresh
     };
 }

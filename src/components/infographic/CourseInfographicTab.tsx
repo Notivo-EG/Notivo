@@ -17,7 +17,7 @@ interface CourseInfographicTabProps {
 
 export function CourseInfographicTab({ courseId }: CourseInfographicTabProps) {
     const supabase = createClient();
-    const { addInfographic, infographics } = useInfographics();
+    const { addInfographic, infographics, isLoading } = useInfographics(courseId);
 
     // State
     const [materials, setMaterials] = useState<any[]>([]);
@@ -94,7 +94,7 @@ export function CourseInfographicTab({ courseId }: CourseInfographicTabProps) {
     };
 
     // Filter infographics for this course
-    const courseInfographics = infographics.filter(i => i.courseId === courseId);
+    const courseInfographics = infographics;
 
     return (
         <div className="grid lg:grid-cols-3 gap-8">
@@ -176,7 +176,12 @@ export function CourseInfographicTab({ courseId }: CourseInfographicTabProps) {
                     Course Infographics
                 </h3>
 
-                {courseInfographics.length === 0 ? (
+                {isLoading ? (
+                    <div className="h-[400px] border-2 border-dashed border-foreground/10 rounded-3xl flex flex-col items-center justify-center text-foreground/30">
+                        <Loader2 className="w-10 h-10 mb-4 animate-spin opacity-50" />
+                        <p>Loading infographics...</p>
+                    </div>
+                ) : courseInfographics.length === 0 ? (
                     <div className="h-[400px] border-2 border-dashed border-foreground/10 rounded-3xl flex flex-col items-center justify-center text-foreground/30">
                         <Sparkles className="w-10 h-10 mb-4 opacity-50" />
                         <p>No infographics generated yet.</p>
