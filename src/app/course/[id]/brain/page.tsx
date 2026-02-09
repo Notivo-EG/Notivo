@@ -1,3 +1,7 @@
+export default function BrainPage() {
+  return null;
+}
+
 // "use client";
 
 // import { motion } from "framer-motion";

@@ -1012,10 +1012,7 @@ export function ExamGeneratorTab({ courseId }: ExamGeneratorTabProps) {
                     <div
                         key={exam.id}
                         className="p-4 rounded-xl bg-card-bg border border-card-border hover:border-primary/50 transition-all cursor-pointer group relative"
-                        onClick={() => {
-                            handleLoadExam(exam);
-                            setViewMode("new");
-                        }}
+                        onClick={() => handleLoadExam(exam)}
                     >
                         <div className="flex justify-between items-start mb-2">
                             <h3 className="font-bold truncate pr-8">{exam.title}</h3>
