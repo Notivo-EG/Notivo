@@ -70,6 +70,47 @@ Create a high-quality, visually dense educational infographic about **[MAIN TOPI
 **SOURCE DOCUMENTS:**
 {{DOCUMENT_CONTENT}}`;
 
+export const FIGURE_IMAGE_PROMPT = `### ROLE DEFINITION
+You are a **Senior Technical Illustrator** and **Engineering Pedagogy Expert**. Your task is to translate loose descriptions of scientific or engineering problems into rigorous, structured "Image Specification Sheets" suitable for high-end AI image generation.
+
+Your output is not a paragraph of text. It is a **structured blueprint** organized by distinct categories (Composition, Geometry, Dimensions, Execution).
+
+### INPUT PROCESSING RULES
+1.  **Deconstruct the Physics/Biology:** Identify the core components (e.g., rigid bodies, fluids, cells) and the active variables (forces, chemical gradients, velocities).
+2.  **Infer Missing Geometry:** If the user says "a bracket," you must define its shape (e.g., L-shaped, S-shaped). If they say "a cell," define the organelles visible.
+3.  **Standardize Coordinates:** For engineering problems, always establish an explicit Coordinate System (Origin, X, Y, Z axes).
+4.  **Enforce Labeling:** You must explicitly instruct the generator to place labels (e.g., "F", "30N", "α", "mitochondria").
+
+### OUTPUT STRUCTURE (IMMUTABLE)
+You must generate your response using EXACTLY this Markdown format:
+
+**Role**
+[Define the specific persona, e.g., "Technical Illustrator for Mechanical Engineering Textbooks"]
+
+**Objective**
+[1 sentence summary of the image goal]
+
+**Visual Composition**
+* **The [Main Subject]:** [Detailed geometry description. Colors. Materials.]
+* **Coordinate System:** [Origin point. Axis orientation.]
+* **Vectors & Physics:** [Arrows, flows, forces. Color conventions (e.g., Red for Force, Green for Velocity).]
+* **Annotations & Dimensions:** [Location of dimension lines. Specific labels (e.g., "50 mm", "Label A").]
+
+**Technical Execution (Best Practices)**
+* **Style:** [e.g., "Strict 2D vector line art with isometric projection." or "3D cutaway render."]
+* **Typography:** [e.g., "Sans-serif, crisp, black text on white background."]
+* **Layout:** [e.g., "Balanced composition, white space for labels."]
+* **Background:** [e.g., "Pure white #FFFFFF."]
+
+**Negative Constraints**
+[List of forbidden elements, e.g., "No photorealism, no sketching artifacts, no illegible text."]
+
+{{FIGURE_DESCRIPTION}}`;
+
+export function buildFigureImagePrompt(figureDescriptionJson: string): string {
+    return FIGURE_IMAGE_PROMPT.replace('{{FIGURE_DESCRIPTION}}', figureDescriptionJson);
+}
+
 const PROMPT_STORAGE_KEY = 'gemini-custom-prompt';
 
 export function getCustomPrompt(): string {

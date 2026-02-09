@@ -11,13 +11,16 @@ import {
     saveExam,
     getExams,
     deleteExam,
+    buildFigurePrompt,
+    saveFigureImage,
+    getFigureImages,
     ExamOptions,
     ExamResult,
     Question,
     EvaluationResult,
 } from "@/services/geminiExamService";
+import { generateInfographic } from "@/lib/nanoBanana";
 import {
-    FileText,
     Download,
     RotateCcw,
     CheckCircle2,
@@ -27,11 +30,11 @@ import {
     ChevronDown,
     ChevronUp,
     Sparkles,
-    Save,
     Trash2,
     History,
     Play,
     Image as ImageIcon,
+    ArrowLeft,
 } from "lucide-react";
 import katex from "katex";
 import "katex/dist/katex.min.css";
@@ -78,11 +81,14 @@ export function ExamGeneratorTab({ courseId }: ExamGeneratorTabProps) {
     const [configExpanded, setConfigExpanded] = useState(true);
 
     // View mode
-    const [viewMode, setViewMode] = useState<"new" | "history">("new");
 
     // Saved exams state
     const [savedExams, setSavedExams] = useState<any[]>([]);
     const [loadingExams, setLoadingExams] = useState(false);
+
+    // Figure image state
+    const [figureImages, setFigureImages] = useState<Record<number, string>>({});
+    const [figureGenerating, setFigureGenerating] = useState<Record<number, boolean>>({});
 
     // Check if exam generation is already running
     const activeExamTask = tasks.find(
@@ -106,36 +112,69 @@ export function ExamGeneratorTab({ courseId }: ExamGeneratorTabProps) {
         fetchSavedExams();
     }, [fetchSavedExams]);
 
-    // Save current exam
-    const handleSaveExam = async () => {
-        if (!examResults) return;
+    // Generate figure images for all figure-type questions
+    const generateFigureImagesForExam = async (exam: ExamResult, examId?: string) => {
+        const figureQuestions = exam.questions.filter(
+            (q) => q.type === "figure" && q.figure_description
+        );
 
-        try {
-            const score = calculateScore();
+        if (figureQuestions.length === 0) return;
 
-            await saveExam(courseId, examResults.quiz_metadata.title, examResults, {
-                correct: score.correct,
-                total: score.total,
-                points: score.points,
-                maxPoints: score.maxPoints,
-            });
-            await fetchSavedExams();
-            alert("Exam saved successfully!");
-        } catch (error) {
-            console.error("Failed to save exam", error);
-            alert("Failed to save exam.");
-        }
+        // Mark all as generating
+        const generatingState: Record<number, boolean> = {};
+        figureQuestions.forEach((q) => (generatingState[q.id] = true));
+        setFigureGenerating((prev) => ({ ...prev, ...generatingState }));
+
+        // Generate in parallel
+        await Promise.allSettled(
+            figureQuestions.map(async (q) => {
+                try {
+                    // Stage 1: Build the filled Nano Banana prompt via Gemini text
+                    const filledPrompt = await buildFigurePrompt(q.figure_description!);
+
+                    // Stage 2: Generate the image via /api/generate
+                    const imageUrl = await generateInfographic({
+                        prompt: filledPrompt,
+                        aspectRatio: "1:1",
+                    });
+
+                    setFigureImages((prev) => ({ ...prev, [q.id]: imageUrl }));
+
+                    // Save to database if we have an exam ID
+                    if (examId) {
+                        try {
+                            await saveFigureImage(examId, q.id, imageUrl, filledPrompt);
+                        } catch (saveErr) {
+                            console.error("Failed to save figure image to DB:", saveErr);
+                        }
+                    }
+                } catch (err) {
+                    console.error(`Failed to generate figure image for Q${q.id}:`, err);
+                } finally {
+                    setFigureGenerating((prev) => ({ ...prev, [q.id]: false }));
+                }
+            })
+        );
     };
 
     // Load saved exam
-    const handleLoadExam = (exam: any) => {
-        if (confirm("Load this exam? Any current progress will be lost.")) {
-            setExamResults(exam.exam_data);
-            setUserAnswers({});
-            setSubmitted(false);
-            setEvaluations({});
-            setShowExplanations(false);
-            window.scrollTo({ top: 0, behavior: "smooth" });
+    const handleLoadExam = async (exam: any) => {
+        setExamResults(exam.exam_data);
+        setUserAnswers({});
+        setSubmitted(false);
+        setEvaluations({});
+        setShowExplanations(false);
+        setFigureImages({});
+        window.scrollTo({ top: 0, behavior: "smooth" });
+
+        // Load saved figure images from database
+        try {
+            const figures = await getFigureImages(exam.id);
+            const imageMap: Record<number, string> = {};
+            figures.forEach((f) => (imageMap[f.question_id] = f.image_url));
+            setFigureImages(imageMap);
+        } catch (err) {
+            console.error("Failed to load figure images:", err);
         }
     };
 
@@ -271,8 +310,29 @@ export function ExamGeneratorTab({ courseId }: ExamGeneratorTabProps) {
             const result = await generateExam(filesData, options);
 
             setExamResults(result);
+            setFigureImages({});
             setProgress("");
             updateTask(taskId, { status: 'completed', progress: 100, message: "Exam ready!" });
+
+            // Auto-save the exam
+            try {
+                const now = new Date();
+                const dateStr = now.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+                const timeStr = now.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
+                const topic = result.quiz_metadata.detected_content_focus?.[0] || result.quiz_metadata.title;
+                const diff = options.difficulty.charAt(0).toUpperCase() + options.difficulty.slice(1);
+                const examTitle = `${topic} — ${diff} · ${dateStr}, ${timeStr}`;
+
+                const savedExamId = await saveExam(courseId, examTitle, result);
+                await fetchSavedExams();
+
+                // Trigger figure image generation with the saved exam ID so images get linked
+                generateFigureImagesForExam(result, savedExamId);
+            } catch (saveErr) {
+                console.error("Auto-save failed:", saveErr);
+                // Still trigger figure generation without exam ID
+                generateFigureImagesForExam(result);
+            }
         } catch (err: any) {
             console.error("Error generating exam:", err);
             setError(err.message || "Failed to generate exam. Please try again.");
@@ -650,62 +710,27 @@ export function ExamGeneratorTab({ courseId }: ExamGeneratorTabProps) {
             });
         };
 
+        const figImage = figureImages[question.id];
+        const figLoading = figureGenerating[question.id];
+
         return (
             <div className="mt-4 space-y-4">
-                {/* Figure Description Box */}
-                <div className="p-4 rounded-xl bg-foreground/5 border border-foreground/10">
-                    <div className="flex items-center gap-2 mb-3">
-                        <span className="text-xl"><ImageIcon className="w-5 h-5 text-foreground/70" /></span>
-                        <strong>Figure Description</strong>
-                        <span className="ml-auto px-2 py-1 text-xs rounded-full bg-primary/20 text-primary">
-                            {figDesc?.format?.figure_type || "Diagram"}
-                        </span>
+                {/* Generated Figure Image */}
+                {figLoading && (
+                    <div className="flex items-center gap-3 p-4 rounded-xl bg-blue-500/10 border border-blue-500/20">
+                        <Loader2 className="w-5 h-5 animate-spin text-blue-400" />
+                        <span className="text-sm text-blue-400 font-medium">Generating figure image...</span>
                     </div>
-
-                    <div className="space-y-3 text-sm">
-                        {figDesc?.format?.overall_layout && (
-                            <div>
-                                <strong className="text-foreground/60">Layout:</strong>
-                                <p className="mt-1">{renderLatex(figDesc.format.overall_layout)}</p>
-                            </div>
-                        )}
-
-                        {figDesc?.format?.elements && figDesc.format.elements.length > 0 && (
-                            <div>
-                                <strong className="text-foreground/60">Elements:</strong>
-                                <div className="mt-2 space-y-2">
-                                    {figDesc.format.elements.map((el, idx) => (
-                                        <div
-                                            key={idx}
-                                            className="p-2 rounded-lg bg-foreground/5 border border-foreground/10"
-                                        >
-                                            <div className="flex items-center gap-2 mb-1">
-                                                <span className="px-2 py-0.5 text-xs rounded bg-primary/20">
-                                                    {el.element_id || `#${idx + 1}`}
-                                                </span>
-                                                <span className="text-xs text-foreground/60">
-                                                    {el.element_type}
-                                                </span>
-                                            </div>
-                                            {el.description && (
-                                                <p className="text-xs">{renderLatex(el.description)}</p>
-                                            )}
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                        )}
-
-                        {figDesc?.format?.critical_details && (
-                            <div className="p-2 rounded-lg bg-yellow-500/10 border border-yellow-500/30">
-                                <strong className="text-yellow-500">Critical Details:</strong>
-                                <p className="mt-1">
-                                    {renderLatex(figDesc.format.critical_details)}
-                                </p>
-                            </div>
-                        )}
+                )}
+                {figImage && (
+                    <div className="rounded-xl overflow-hidden border border-foreground/10 max-w-sm mx-auto">
+                        <img
+                            src={figImage}
+                            alt={figDesc?.description || "Exam figure"}
+                            className="w-full h-auto"
+                        />
                     </div>
-                </div>
+                )}
 
                 {/* Label Identification */}
                 {labels.length > 0 && (
@@ -1024,285 +1049,273 @@ export function ExamGeneratorTab({ courseId }: ExamGeneratorTabProps) {
     const totalQuestions = examResults?.questions?.length || 0;
 
     return (
-        <div className="space-y-6">
-            {/* View Toggle */}
-            <div className="flex p-1 rounded-xl bg-card-bg border border-card-border mb-6">
-                <button
-                    onClick={() => setViewMode("new")}
-                    className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all ${viewMode === "new"
-                        ? "bg-primary/20 text-primary shadow-sm"
-                        : "text-foreground/60 hover:text-foreground"
-                        }`}
-                >
-                    New Exam
-                </button>
-                <button
-                    onClick={() => setViewMode("history")}
-                    className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all ${viewMode === "history"
-                        ? "bg-primary/20 text-primary shadow-sm"
-                        : "text-foreground/60 hover:text-foreground"
-                        }`}
-                >
-                    Saved Exams
-                </button>
-            </div>
-
-            {viewMode === "history" ? (
-                <div className="space-y-6">
-                    <div className="flex items-center justify-between">
-                        <h2 className="text-xl font-bold flex items-center gap-2">
-                            <History className="w-5 h-5" /> Saved Exams
-                        </h2>
-                        <button onClick={fetchSavedExams} className="p-2 hover:bg-foreground/10 rounded-lg transition-colors">
-                            <RotateCcw className="w-4 h-4" />
-                        </button>
-                    </div>
-                    {renderSavedExams()}
-                </div>
-            ) : (
-                <>
-                    {/* Material Selection */}
-                    <section className="p-6 rounded-2xl bg-card-bg/60 backdrop-blur border border-card-border">
-                        <h2 className="text-lg font-bold mb-4 flex items-center gap-2">
-                            <FileText className="w-5 h-5" />
-                            Select Source Materials
-                        </h2>
-                        <MaterialSelector
-                            courseId={courseId}
-                            selectedIds={selectedMaterialIds}
-                            onSelectionChange={setSelectedMaterialIds}
-                        />
-                    </section>
-
-                    {/* Configuration */}
-                    <section className="p-6 rounded-2xl bg-card-bg/60 backdrop-blur border border-card-border">
-                        <button
-                            className="w-full flex items-center justify-between"
-                            onClick={() => setConfigExpanded(!configExpanded)}
-                        >
-                            <h2 className="text-lg font-bold flex items-center gap-2">
-                                Exam Configuration
-                            </h2>
-                            {configExpanded ? (
-                                <ChevronUp className="w-5 h-5" />
-                            ) : (
-                                <ChevronDown className="w-5 h-5" />
-                            )}
-                        </button>
-
-                        {configExpanded && (
-                            <div className="mt-4 grid grid-cols-2 md:grid-cols-3 gap-4">
-                                {/* Difficulty */}
-                                <div>
-                                    <label className="block text-sm font-medium text-foreground/60 mb-2">
-                                        Difficulty
-                                    </label>
-                                    <select
-                                        value={options.difficulty}
-                                        onChange={(e) =>
-                                            setOptions({
-                                                ...options,
-                                                difficulty: e.target.value as "easy" | "medium" | "hard",
-                                            })
-                                        }
-                                        className="w-full p-3 rounded-xl bg-foreground/5 border border-foreground/10 text-foreground"
-                                        disabled={loading}
-                                    >
-                                        <option value="easy">Easy</option>
-                                        <option value="medium">Medium</option>
-                                        <option value="hard">Hard</option>
-                                    </select>
-                                </div>
-
-                                {/* Study Type */}
-                                <div>
-                                    <label className="block text-sm font-medium text-foreground/60 mb-2">
-                                        Study Type
-                                    </label>
-                                    <select
-                                        value={options.study_type}
-                                        onChange={(e) =>
-                                            setOptions({
-                                                ...options,
-                                                study_type: e.target.value as
-                                                    | "memorize"
-                                                    | "understand"
-                                                    | "apply",
-                                            })
-                                        }
-                                        className="w-full p-3 rounded-xl bg-foreground/5 border border-foreground/10 text-foreground"
-                                        disabled={loading}
-                                    >
-                                        <option value="memorize">Memorize</option>
-                                        <option value="understand">Understand</option>
-                                        <option value="apply">Apply</option>
-                                    </select>
-                                </div>
-
-                                {/* MCQ Options */}
-                                <div>
-                                    <label className="block text-sm font-medium text-foreground/60 mb-2">
-                                        MCQ Options
-                                    </label>
-                                    <select
-                                        value={options.mcq_options}
-                                        onChange={(e) =>
-                                            setOptions({
-                                                ...options,
-                                                mcq_options: parseInt(e.target.value),
-                                            })
-                                        }
-                                        className="w-full p-3 rounded-xl bg-foreground/5 border border-foreground/10 text-foreground"
-                                        disabled={loading}
-                                    >
-                                        <option value={3}>3 options</option>
-                                        <option value={4}>4 options</option>
-                                        <option value={5}>5 options</option>
-                                    </select>
-                                </div>
-
-                                {/* Question Counts */}
-                                <div>
-                                    <label className="block text-sm font-medium text-foreground/60 mb-2">
-                                        MCQ Count
-                                    </label>
-                                    <input
-                                        type="number"
-                                        min={0}
-                                        max={10}
-                                        value={options.mcq_count}
-                                        onChange={(e) =>
-                                            setOptions({
-                                                ...options,
-                                                mcq_count: parseInt(e.target.value) || 0,
-                                            })
-                                        }
-                                        className="w-full p-3 rounded-xl bg-foreground/5 border border-foreground/10 text-foreground"
-                                        disabled={loading}
-                                    />
-                                </div>
-
-                                <div>
-                                    <label className="block text-sm font-medium text-foreground/60 mb-2">
-                                        True/False Count
-                                    </label>
-                                    <input
-                                        type="number"
-                                        min={0}
-                                        max={10}
-                                        value={options.true_false_count}
-                                        onChange={(e) =>
-                                            setOptions({
-                                                ...options,
-                                                true_false_count: parseInt(e.target.value) || 0,
-                                            })
-                                        }
-                                        className="w-full p-3 rounded-xl bg-foreground/5 border border-foreground/10 text-foreground"
-                                        disabled={loading}
-                                    />
-                                </div>
-
-                                <div>
-                                    <label className="block text-sm font-medium text-foreground/60 mb-2">
-                                        Fill in Blank Count
-                                    </label>
-                                    <input
-                                        type="number"
-                                        min={0}
-                                        max={10}
-                                        value={options.complete_count}
-                                        onChange={(e) =>
-                                            setOptions({
-                                                ...options,
-                                                complete_count: parseInt(e.target.value) || 0,
-                                            })
-                                        }
-                                        className="w-full p-3 rounded-xl bg-foreground/5 border border-foreground/10 text-foreground"
-                                        disabled={loading}
-                                    />
-                                </div>
-
-                                <div>
-                                    <label className="block text-sm font-medium text-foreground/60 mb-2">
-                                        Essay Count
-                                    </label>
-                                    <input
-                                        type="number"
-                                        min={0}
-                                        max={5}
-                                        value={options.essay_count}
-                                        onChange={(e) =>
-                                            setOptions({
-                                                ...options,
-                                                essay_count: parseInt(e.target.value) || 0,
-                                            })
-                                        }
-                                        className="w-full p-3 rounded-xl bg-foreground/5 border border-foreground/10 text-foreground"
-                                        disabled={loading}
-                                    />
-                                </div>
-
-                                <div>
-                                    <label className="block text-sm font-medium text-foreground/60 mb-2">
-                                        Figure Count
-                                    </label>
-                                    <input
-                                        type="number"
-                                        min={0}
-                                        max={5}
-                                        value={options.figure_count}
-                                        onChange={(e) =>
-                                            setOptions({
-                                                ...options,
-                                                figure_count: parseInt(e.target.value) || 0,
-                                            })
-                                        }
-                                        className="w-full p-3 rounded-xl bg-foreground/5 border border-foreground/10 text-foreground"
-                                        disabled={loading}
-                                    />
-                                </div>
+        <div className="grid lg:grid-cols-3 gap-8">
+            {/* LEFT: Material Selection, Config & Generate */}
+            {!examResults && (
+                <div className="lg:col-span-1 space-y-6">
+                    {/* Material Selector */}
+                            <div className="bg-card-bg border border-card-border rounded-2xl p-6">
+                                <MaterialSelector
+                                    courseId={courseId}
+                                    selectedIds={selectedMaterialIds}
+                                    onSelectionChange={setSelectedMaterialIds}
+                                />
                             </div>
-                        )}
-                    </section>
 
-                    {/* Error */}
-                    {error && (
-                        <div className="p-4 rounded-xl bg-red-500/20 border border-red-500/50 text-red-300">
-                            ⚠️ {error}
-                        </div>
-                    )}
+                            {/* Configuration */}
+                            <div className="bg-card-bg border border-card-border rounded-2xl p-6">
+                                <button
+                                    className="w-full flex items-center justify-between"
+                                    onClick={() => setConfigExpanded(!configExpanded)}
+                                >
+                                    <h3 className="text-sm font-bold text-foreground/70 flex items-center gap-2">
+                                        Exam Configuration
+                                    </h3>
+                                    {configExpanded ? (
+                                        <ChevronUp className="w-4 h-4 text-foreground/40" />
+                                    ) : (
+                                        <ChevronDown className="w-4 h-4 text-foreground/40" />
+                                    )}
+                                </button>
 
-                    {/* Generate Button */}
-                    {!examResults && (
-                        <button
-                            onClick={handleGenerateExam}
-                            disabled={loading || selectedMaterialIds.length === 0}
-                            className="w-full py-4 rounded-2xl bg-foreground text-background font-bold text-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3 hover:opacity-90 transition-all"
-                        >
-                            {loading ? (
-                                <>
-                                    <Loader2 className="w-5 h-5 animate-spin" />
-                                    Generating...
-                                </>
-                            ) : (
-                                <>
-                                    <Sparkles className="w-5 h-5" />
-                                    Generate Exam
-                                </>
+                                {configExpanded && (
+                                    <div className="mt-4 grid grid-cols-2 gap-3">
+                                        {/* Difficulty */}
+                                        <div>
+                                            <label className="block text-xs font-medium text-foreground/50 mb-1">
+                                                Difficulty
+                                            </label>
+                                            <select
+                                                value={options.difficulty}
+                                                onChange={(e) =>
+                                                    setOptions({
+                                                        ...options,
+                                                        difficulty: e.target.value as "easy" | "medium" | "hard",
+                                                    })
+                                                }
+                                                className="w-full p-2.5 rounded-xl bg-foreground/5 border border-foreground/10 text-foreground text-sm"
+                                                disabled={loading}
+                                            >
+                                                <option value="easy">Easy</option>
+                                                <option value="medium">Medium</option>
+                                                <option value="hard">Hard</option>
+                                            </select>
+                                        </div>
+
+                                        {/* Study Type */}
+                                        <div>
+                                            <label className="block text-xs font-medium text-foreground/50 mb-1">
+                                                Study Type
+                                            </label>
+                                            <select
+                                                value={options.study_type}
+                                                onChange={(e) =>
+                                                    setOptions({
+                                                        ...options,
+                                                        study_type: e.target.value as
+                                                            | "memorize"
+                                                            | "understand"
+                                                            | "apply",
+                                                    })
+                                                }
+                                                className="w-full p-2.5 rounded-xl bg-foreground/5 border border-foreground/10 text-foreground text-sm"
+                                                disabled={loading}
+                                            >
+                                                <option value="memorize">Memorize</option>
+                                                <option value="understand">Understand</option>
+                                                <option value="apply">Apply</option>
+                                            </select>
+                                        </div>
+
+                                        {/* MCQ Options */}
+                                        <div>
+                                            <label className="block text-xs font-medium text-foreground/50 mb-1">
+                                                MCQ Options
+                                            </label>
+                                            <select
+                                                value={options.mcq_options}
+                                                onChange={(e) =>
+                                                    setOptions({
+                                                        ...options,
+                                                        mcq_options: parseInt(e.target.value),
+                                                    })
+                                                }
+                                                className="w-full p-2.5 rounded-xl bg-foreground/5 border border-foreground/10 text-foreground text-sm"
+                                                disabled={loading}
+                                            >
+                                                <option value={3}>3 options</option>
+                                                <option value={4}>4 options</option>
+                                                <option value={5}>5 options</option>
+                                            </select>
+                                        </div>
+
+                                        {/* Question Counts */}
+                                        <div>
+                                            <label className="block text-xs font-medium text-foreground/50 mb-1">
+                                                MCQ Count
+                                            </label>
+                                            <input
+                                                type="number"
+                                                min={0}
+                                                max={10}
+                                                value={options.mcq_count}
+                                                onChange={(e) =>
+                                                    setOptions({
+                                                        ...options,
+                                                        mcq_count: parseInt(e.target.value) || 0,
+                                                    })
+                                                }
+                                                className="w-full p-2.5 rounded-xl bg-foreground/5 border border-foreground/10 text-foreground text-sm"
+                                                disabled={loading}
+                                            />
+                                        </div>
+
+                                        <div>
+                                            <label className="block text-xs font-medium text-foreground/50 mb-1">
+                                                True/False
+                                            </label>
+                                            <input
+                                                type="number"
+                                                min={0}
+                                                max={10}
+                                                value={options.true_false_count}
+                                                onChange={(e) =>
+                                                    setOptions({
+                                                        ...options,
+                                                        true_false_count: parseInt(e.target.value) || 0,
+                                                    })
+                                                }
+                                                className="w-full p-2.5 rounded-xl bg-foreground/5 border border-foreground/10 text-foreground text-sm"
+                                                disabled={loading}
+                                            />
+                                        </div>
+
+                                        <div>
+                                            <label className="block text-xs font-medium text-foreground/50 mb-1">
+                                                Fill in Blank
+                                            </label>
+                                            <input
+                                                type="number"
+                                                min={0}
+                                                max={10}
+                                                value={options.complete_count}
+                                                onChange={(e) =>
+                                                    setOptions({
+                                                        ...options,
+                                                        complete_count: parseInt(e.target.value) || 0,
+                                                    })
+                                                }
+                                                className="w-full p-2.5 rounded-xl bg-foreground/5 border border-foreground/10 text-foreground text-sm"
+                                                disabled={loading}
+                                            />
+                                        </div>
+
+                                        <div>
+                                            <label className="block text-xs font-medium text-foreground/50 mb-1">
+                                                Essay
+                                            </label>
+                                            <input
+                                                type="number"
+                                                min={0}
+                                                max={5}
+                                                value={options.essay_count}
+                                                onChange={(e) =>
+                                                    setOptions({
+                                                        ...options,
+                                                        essay_count: parseInt(e.target.value) || 0,
+                                                    })
+                                                }
+                                                className="w-full p-2.5 rounded-xl bg-foreground/5 border border-foreground/10 text-foreground text-sm"
+                                                disabled={loading}
+                                            />
+                                        </div>
+
+                                        <div>
+                                            <label className="block text-xs font-medium text-foreground/50 mb-1">
+                                                Figure
+                                            </label>
+                                            <input
+                                                type="number"
+                                                min={0}
+                                                max={5}
+                                                value={options.figure_count}
+                                                onChange={(e) =>
+                                                    setOptions({
+                                                        ...options,
+                                                        figure_count: parseInt(e.target.value) || 0,
+                                                    })
+                                                }
+                                                className="w-full p-2.5 rounded-xl bg-foreground/5 border border-foreground/10 text-foreground text-sm"
+                                                disabled={loading}
+                                            />
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Error */}
+                            {error && (
+                                <div className="p-4 rounded-xl bg-red-500/20 border border-red-500/50 text-red-300 text-sm">
+                                    {error}
+                                </div>
                             )}
-                        </button>
-                    )}
 
-                    {/* Progress */}
-                    {loading && progress && (
-                        <div className="p-4 rounded-xl bg-primary/10 border border-primary/30 text-center text-primary">
-                            {progress}
-                        </div>
-                    )}
+                            {/* Generate Button */}
+                            <button
+                                onClick={handleGenerateExam}
+                                disabled={loading || selectedMaterialIds.length === 0}
+                                className="w-full py-4 rounded-2xl bg-foreground text-background font-bold text-lg transition-all flex items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90"
+                            >
+                                {loading ? (
+                                    <>
+                                        <Loader2 className="w-5 h-5 animate-spin" />
+                                        Generating...
+                                    </>
+                                ) : (
+                                    <>
+                                        <Sparkles className="w-5 h-5" />
+                                        Generate Exam
+                                    </>
+                                )}
+                            </button>
 
-                    {/* Exam Results */}
-                    {examResults && (
+                    {loading && (
+                        <p className="text-xs text-foreground/40 text-center">
+                            You can switch tabs — generation continues in the background.
+                        </p>
+                    )}
+                </div>
+            )}
+
+            {/* RIGHT: Results / Recent Exams */}
+            <div className={examResults ? "lg:col-span-3" : "lg:col-span-2"}>
+                {!examResults && (
+                    <div className="space-y-4">
+                        <h3 className="text-lg font-bold flex items-center gap-2 text-foreground/80">
+                            <History className="w-5 h-5" /> Recent Exams
+                        </h3>
+                        {renderSavedExams()}
+                    </div>
+                )}
+
+                {/* Exam Results - full width when active */}
+                {examResults && (
                         <div className="space-y-6">
+                            {/* Back Button */}
+                            <button
+                                onClick={() => {
+                                    setExamResults(null);
+                                    setUserAnswers({});
+                                    setSubmitted(false);
+                                    setEvaluations({});
+                                    setShowExplanations(false);
+                                }}
+                                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-card-bg border border-card-border text-sm font-medium text-foreground/70 hover:text-foreground hover:bg-foreground/5 transition-all"
+                            >
+                                <ArrowLeft className="w-4 h-4" />
+                                Back to Exam Generator
+                            </button>
+
                             {/* Results Header */}
                             <div className="p-6 rounded-2xl bg-card-bg/60 backdrop-blur border border-card-border">
                                 <h2 className="text-xl font-bold mb-4">
@@ -1373,13 +1386,6 @@ export function ExamGeneratorTab({ courseId }: ExamGeneratorTabProps) {
                                     )}
 
                                     <button
-                                        onClick={handleSaveExam}
-                                        className="px-4 py-2 rounded-xl bg-foreground/10 hover:bg-foreground/20 transition-all flex items-center gap-2"
-                                    >
-                                        <Save className="w-4 h-4" />
-                                        Save Exam
-                                    </button>
-                                    <button
                                         onClick={downloadJSON}
                                         className="px-4 py-2 rounded-xl bg-foreground/10 hover:bg-foreground/20 transition-all flex items-center gap-2 ml-auto"
                                     >
@@ -1395,10 +1401,17 @@ export function ExamGeneratorTab({ courseId }: ExamGeneratorTabProps) {
                                     renderQuestion(question, index)
                                 )}
                             </div>
+
+                            {/* Back to New Exam */}
+                            <button
+                                onClick={handleReset}
+                                className="w-full py-3 rounded-xl border border-card-border text-foreground/60 hover:text-foreground hover:bg-foreground/5 transition-all text-sm font-medium"
+                            >
+                                Generate New Exam
+                            </button>
                         </div>
                     )}
-                </>
-            )}
+            </div>
         </div>
     );
 }

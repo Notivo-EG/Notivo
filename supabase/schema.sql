@@ -254,3 +254,33 @@ create policy "Users can view own exams" on generated_exams for select using (
 create policy "Users can manage own exams" on generated_exams for all using (
   exists (select 1 from student_courses sc join enrollments e on sc.enrollment_id = e.id where sc.id = generated_exams.student_course_id and e.user_id = auth.uid())
 );
+
+-- 11. EXAM FIGURES (AI-generated images for figure-type exam questions)
+create table exam_figures (
+  id uuid default uuid_generate_v4() primary key,
+  generated_exam_id uuid references generated_exams(id) on delete cascade not null,
+  question_id int not null,
+  image_url text not null,
+  prompt_used text,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+-- RLS for Exam Figures
+alter table exam_figures enable row level security;
+
+create policy "Users can view own exam figures" on exam_figures for select using (
+  exists (
+    select 1 from generated_exams ge
+    join student_courses sc on ge.student_course_id = sc.id
+    join enrollments e on sc.enrollment_id = e.id
+    where ge.id = exam_figures.generated_exam_id and e.user_id = auth.uid()
+  )
+);
+create policy "Users can manage own exam figures" on exam_figures for all using (
+  exists (
+    select 1 from generated_exams ge
+    join student_courses sc on ge.student_course_id = sc.id
+    join enrollments e on sc.enrollment_id = e.id
+    where ge.id = exam_figures.generated_exam_id and e.user_id = auth.uid()
+  )
+);
