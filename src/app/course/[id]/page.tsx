@@ -50,6 +50,7 @@ import { FlashcardsTab } from "@/components/course/ui/FlashcardsTab";
 import { QuizTab } from "@/components/course/ui/QuizTab";
 import { ExtraCurricularTab } from "@/components/course/ui/ExtraCurricularTab";
 import { ExamGeneratorTab } from "@/components/course/ui/ExamGeneratorTab";
+import { ShareButton } from "@/components/course/ShareButton";
 
 // Types
 interface Course {
@@ -225,6 +226,7 @@ export default function CoursePage() {
                     </div>
 
                     <div className="flex items-center gap-3">
+                        <ShareButton courseId={courseId} />
                         <button
                             onClick={() => { setShowSettings(!showSettings); playSound('click'); }}
                             className={`flex items-center gap-2 px-5 py-2.5 rounded-full font-medium transition-all ${showSettings ? 'bg-foreground text-background' : 'bg-card-bg text-foreground/60 hover:text-foreground border border-card-border'}`}

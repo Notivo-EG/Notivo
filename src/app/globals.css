@@ -69,6 +69,21 @@ body {
   background: rgba(255, 255, 255, 0.7);
 }
 
+/* Force dark mode on landing page regardless of theme */
+.force-dark {
+  --foreground: #ffffff;
+  --card-bg: #0a0a0a;
+  --card-border: rgba(255, 255, 255, 0.1);
+  --beam-core: #ffffff;
+  --beam-glow: #3b82f6;
+  --beam-purple: #a855f7;
+}
+
+.force-dark .glass {
+  background: rgba(20, 20, 20, 0.6);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
 /* Reduced Motion - Disable all animations */
 .reduce-motion *,
 .reduce-motion *::before,

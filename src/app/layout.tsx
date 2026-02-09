@@ -22,6 +22,13 @@ export const metadata: Metadata = {
   title: "Notiva | AI Academic Architect",
   description: "Don't just take notes. Engineer your degree. AI-powered academic planning that adapts when life happens.",
   keywords: ["study planner", "academic architect", "AI learning", "course planning", "exam preparation"],
+  icons: {
+    icon: [
+      { url: "/logo.png", href: "/logo.png" },
+    ],
+    shortcut: "/logo.png",
+    apple: "/logo.png",
+  },
 };
 
 export default function RootLayout({
@@ -39,7 +46,7 @@ export default function RootLayout({
             <PlayerProvider>
               <div className="flex">
                 <Navbar />
-                <main className="flex-1 min-h-screen pb-24">{children}</main>
+                <main className="flex-1 min-h-screen">{children}</main>
                 <ActivityIndicator />
               </div>
               <GlobalPlayer />

@@ -3,6 +3,7 @@
 import { motion } from "framer-motion";
 import { Home, BookOpen, LayoutDashboard, Settings, LogOut, Menu, X } from "lucide-react";
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 
@@ -26,8 +27,14 @@ export function Navbar() {
             <nav className="hidden lg:flex fixed left-0 top-0 h-screen w-20 flex-col items-center py-8 bg-card-bg/80 backdrop-blur-xl border-r border-card-border z-50">
                 {/* Logo */}
                 <Link href="/dashboard" className="mb-10">
-                    <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-cyan-500/20 via-blue-500/20 to-purple-500/20 flex items-center justify-center shadow-[0_0_20px_rgba(6,182,212,0.2)] border border-card-border backdrop-blur-md">
-                        <span className="text-foreground font-bold text-xl drop-shadow-md">S</span>
+                    <div className="w-12 h-12 rounded-2xl flex items-center justify-center">
+                        <Image
+                            src="/logo.png"
+                            alt="Notiva Logo"
+                            width={35}
+                            height={35}
+                            className="dark:invert"
+                        />
                     </div>
                 </Link>
 
@@ -65,8 +72,14 @@ export function Navbar() {
             {/* Mobile Header - Theme Aware */}
             <nav className="lg:hidden fixed top-0 left-0 right-0 h-16 bg-card-bg/80 backdrop-blur-xl border-b border-card-border z-50 flex items-center justify-between px-4">
                 <Link href="/dashboard">
-                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-500/20 via-blue-500/20 to-purple-500/20 flex items-center justify-center border border-card-border">
-                        <span className="text-foreground font-bold">S</span>
+                    <div className="w-10 h-10 rounded-xl flex items-center justify-center">
+                        <Image
+                            src="/logo.png"
+                            alt="Notiva Logo"
+                            width={40}
+                            height={40}
+                            className="dark:invert"
+                        />
                     </div>
                 </Link>
 
