@@ -166,11 +166,11 @@ export default function SettingsPage() {
                             <LogOut className="w-5 h-5" />
                             Session
                         </h2>
-                        <div className="flex items-center justify-between">
+                        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                             <p className="text-foreground/60">Sign out of your account on this device</p>
                             <button
                                 onClick={handleLogout}
-                                className="px-6 py-3 rounded-full bg-red-500/10 hover:bg-red-500/20 text-red-500 border border-red-500/20 transition-all font-medium"
+                                className="px-6 py-3 rounded-full bg-red-500/10 hover:bg-red-500/20 text-red-500 border border-red-500/20 transition-all font-medium whitespace-nowrap"
                             >
                                 Log Out
                             </button>
@@ -184,12 +184,12 @@ export default function SettingsPage() {
 
 function ToggleRow({ icon: Icon, label, description, checked, onChange }: any) {
     return (
-        <div className="flex items-center justify-between group">
-            <div className="flex items-center gap-4">
-                <div className={`p-3 rounded-xl ${checked ? 'bg-blue-500/20 text-blue-400' : 'bg-foreground/5 text-foreground/40'} transition-colors`}>
+        <div className="flex items-center justify-between gap-4 group">
+            <div className="flex items-center gap-4 min-w-0">
+                <div className={`p-3 rounded-xl shrink-0 ${checked ? 'bg-blue-500/20 text-blue-400' : 'bg-foreground/5 text-foreground/40'} transition-colors`}>
                     <Icon size={20} />
                 </div>
-                <div>
+                <div className="min-w-0">
                     <h3 className="font-bold text-foreground group-hover:text-blue-400 transition-colors">{label}</h3>
                     <p className="text-sm text-foreground/50">{description}</p>
                 </div>
@@ -197,7 +197,7 @@ function ToggleRow({ icon: Icon, label, description, checked, onChange }: any) {
 
             <button
                 onClick={onChange}
-                className={`relative w-14 h-8 rounded-full transition-all duration-300 ${checked ? 'bg-blue-600' : 'bg-foreground/10'}`}
+                className={`relative w-14 h-8 rounded-full transition-all duration-300 shrink-0 ${checked ? 'bg-blue-600' : 'bg-foreground/10'}`}
             >
                 <motion.div
                     layout
