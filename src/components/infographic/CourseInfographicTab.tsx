@@ -117,8 +117,8 @@ export function CourseInfographicTab({ courseId }: CourseInfographicTabProps) {
                                     key={m.id}
                                     onClick={() => setSelectedMaterial(m.id)}
                                     className={`w-full text-left p-3 rounded-xl border transition-all flex items-center gap-3 ${selectedMaterial === m.id
-                                            ? 'bg-blue-600/20 border-blue-500/50 text-foreground'
-                                            : 'bg-foreground/5 border-transparent text-foreground/60 hover:bg-foreground/10'
+                                        ? 'bg-blue-600/20 border-blue-500/50 text-foreground'
+                                        : 'bg-foreground/5 border-transparent text-foreground/60 hover:bg-foreground/10'
                                         }`}
                                 >
                                     <FileText className="w-4 h-4 shrink-0" />
@@ -144,8 +144,8 @@ export function CourseInfographicTab({ courseId }: CourseInfographicTabProps) {
                             onClick={handleGenerate}
                             disabled={!selectedMaterial}
                             className={`w-full py-3 rounded-xl font-bold transition-all ${selectedMaterial
-                                    ? 'bg-foreground text-background hover:scale-105'
-                                    : 'bg-foreground/10 text-foreground/30 cursor-not-allowed'
+                                ? 'bg-foreground text-background hover:scale-105'
+                                : 'bg-foreground/10 text-foreground/30 cursor-not-allowed'
                                 }`}
                         >
                             {status === 'error' ? 'Retry Generation' : 'Create Visual Summary'}

@@ -3,6 +3,8 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Navbar } from "@/components/Navbar";
 import { PreferencesProvider } from "@/context/PreferencesContext";
+import { GenerationProvider } from "@/context/GenerationContext";
+import { ActivityIndicator } from "@/components/ui/ActivityIndicator";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -31,10 +33,13 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         <PreferencesProvider>
-          <div className="flex">
-            <Navbar />
-            <main className="flex-1 min-h-screen">{children}</main>
-          </div>
+          <GenerationProvider>
+            <div className="flex">
+              <Navbar />
+              <main className="flex-1 min-h-screen">{children}</main>
+              <ActivityIndicator />
+            </div>
+          </GenerationProvider>
         </PreferencesProvider>
         <script
           dangerouslySetInnerHTML={{

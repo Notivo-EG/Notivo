@@ -274,15 +274,21 @@ export async function uploadBrainMaterial(formData: FormData, courseId: string) 
 }
 
 // LEVEL 4: FLASHCARD GENERATOR ACTION
-export async function generateFlashcards(courseId: string) {
+export async function generateFlashcards(courseId: string, materialIds?: string[]) {
     const supabase = await createClient();
 
     try {
         // 1. Fetch uploaded materials for this course
-        const { data: materials, error: materialsError } = await supabase
+        let query = supabase
             .from('course_materials')
             .select('*')
             .eq('student_course_id', courseId);
+
+        if (materialIds && materialIds.length > 0) {
+            query = query.in('id', materialIds);
+        }
+
+        const { data: materials, error: materialsError } = await query;
 
         if (materialsError) throw materialsError;
         if (!materials || materials.length === 0) {
@@ -440,7 +446,7 @@ export async function generateQuizAction(courseId: string, config: {
     trueFalse: number;
     writtenConcepts: number;
     writtenProblems: number;
-}) {
+}, materialIds?: string[]) {
     const supabase = await createClient();
 
     try {
@@ -455,10 +461,16 @@ export async function generateQuizAction(courseId: string, config: {
             .eq('id', courseId)
             .single();
 
-        const { data: materials } = await supabase
+        let query = supabase
             .from('course_materials')
-            .select('ai_summary')
+            .select('*') // Fixed: select * to get content_url
             .eq('student_course_id', courseId);
+
+        if (materialIds && materialIds.length > 0) {
+            query = query.in('id', materialIds);
+        }
+
+        const { data: materials } = await query;
 
         // Helper to safely get major name
         const majorName = Array.isArray(courseData?.majors)

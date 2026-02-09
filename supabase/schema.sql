@@ -180,6 +180,28 @@ create table generated_songs (
   cover_url text,
   style text default 'Electronic Pop',
   prompt text,
+  source_materials jsonb, -- [{id, title}]
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+create table generated_videos (
+  id uuid default uuid_generate_v4() primary key,
+  student_course_id uuid references student_courses(id) on delete cascade not null,
+  job_id text not null, -- Backend job ID
+  title text,
+  video_url text, -- Stored video URL
+  config jsonb, -- {voice, detail_level, max_duration}
+  source_materials jsonb, -- [{id, title}]
+  status text default 'pending', -- pending, processing, completed, failed
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+create table infographics (
+  id uuid default uuid_generate_v4() primary key,
+  student_course_id uuid references student_courses(id) on delete cascade not null,
+  title text,
+  image_url text not null,
+  source_materials jsonb, -- [{id, title}]
   created_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
 
@@ -191,4 +213,44 @@ create policy "Users can view own songs" on generated_songs for select using (
 );
 create policy "Users can manage own songs" on generated_songs for all using (
   exists (select 1 from student_courses sc join enrollments e on sc.enrollment_id = e.id where sc.id = generated_songs.student_course_id and e.user_id = auth.uid())
+);
+
+-- RLS for Generated Videos
+alter table generated_videos enable row level security;
+
+create policy "Users can view own generated videos" on generated_videos for select using (
+  exists (select 1 from student_courses sc join enrollments e on sc.enrollment_id = e.id where sc.id = generated_videos.student_course_id and e.user_id = auth.uid())
+);
+create policy "Users can manage own generated videos" on generated_videos for all using (
+  exists (select 1 from student_courses sc join enrollments e on sc.enrollment_id = e.id where sc.id = generated_videos.student_course_id and e.user_id = auth.uid())
+);
+
+-- RLS for Infographics
+alter table infographics enable row level security;
+
+create policy "Users can view own infographics" on infographics for select using (
+  exists (select 1 from student_courses sc join enrollments e on sc.enrollment_id = e.id where sc.id = infographics.student_course_id and e.user_id = auth.uid())
+);
+create policy "Users can manage own infographics" on infographics for all using (
+  exists (select 1 from student_courses sc join enrollments e on sc.enrollment_id = e.id where sc.id = infographics.student_course_id and e.user_id = auth.uid())
+);
+
+-- 10. GENERATED EXAMS (Quiz History)
+create table generated_exams (
+  id uuid default uuid_generate_v4() primary key,
+  student_course_id uuid references student_courses(id) on delete cascade not null,
+  title text,
+  exam_data jsonb, -- The full ExamResult object
+  score_data jsonb, -- { correct, total, points, maxPoints }
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+-- RLS for Generated Exams
+alter table generated_exams enable row level security;
+
+create policy "Users can view own exams" on generated_exams for select using (
+  exists (select 1 from student_courses sc join enrollments e on sc.enrollment_id = e.id where sc.id = generated_exams.student_course_id and e.user_id = auth.uid())
+);
+create policy "Users can manage own exams" on generated_exams for all using (
+  exists (select 1 from student_courses sc join enrollments e on sc.enrollment_id = e.id where sc.id = generated_exams.student_course_id and e.user_id = auth.uid())
 );
