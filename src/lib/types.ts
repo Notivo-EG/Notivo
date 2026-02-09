@@ -16,6 +16,7 @@ export interface Infographic {
     title: string;
     imageUrl: string;
     sources: { id: string; name: string }[];
+    sourceIndexes?: number[]; // Indexes of selected PDFs (e.g., [1, 3])
     createdAt: string;
     courseId?: string;
 }

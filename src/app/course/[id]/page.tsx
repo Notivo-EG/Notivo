@@ -295,7 +295,7 @@ export default function CoursePage() {
                                                     <p className="font-medium">New Professor / New Course</p>
                                                     <p className="text-sm opacity-60">
                                                         {professorNew
-                                                            ? "⚠️ Old exams flagged as Low Reliability"
+                                                            ? "Old exams flagged as Low Reliability"
                                                             : "Old exams are considered reliable"}
                                                     </p>
                                                 </div>
@@ -343,18 +343,6 @@ export default function CoursePage() {
                         />
 
                         <TabButton
-                            active={brainTab === 'extra'}
-                            onClick={() => setBrainTab('extra')}
-                            icon={Sparkles}
-                            label="Go Deeper"
-                        />
-                        <TabButton
-                            active={brainTab === 'quiz'}
-                            onClick={() => setBrainTab('quiz')}
-                            icon={HelpCircle}
-                            label="AI Quiz"
-                        />
-                        <TabButton
                             active={brainTab === 'songs'}
                             onClick={() => setBrainTab('songs')}
                             icon={Music}
@@ -378,9 +366,7 @@ export default function CoursePage() {
                         {brainTab === 'content' && <ContentEngineTab courseId={courseId} />}
                         {brainTab === 'flashcards' && <FlashcardsTab courseId={courseId} />}
                         {brainTab === 'infographic' && <CourseInfographicTab courseId={courseId} />}
-                        {brainTab === 'quiz' && <QuizTab courseId={courseId} />}
                         {brainTab === 'videos' && <VideoTutorTab courseId={courseId} />}
-                        {brainTab === 'extra' && <ExtraCurricularTab />}
                         {brainTab === 'songs' && <SongsTab courseId={courseId} />}
                         {brainTab === 'exam' && <ExamGeneratorTab courseId={courseId} />}
                     </div>

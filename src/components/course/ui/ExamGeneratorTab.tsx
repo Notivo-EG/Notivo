@@ -1,8 +1,10 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { useGeneration } from "@/context/GenerationContext";
 import { MaterialSelector } from "./MaterialSelector";
+import { v4 as uuidv4 } from "uuid";
 import {
     generateExam,
     evaluateAnswer,
@@ -18,6 +20,7 @@ import {
     FileText,
     Download,
     RotateCcw,
+    CheckCircle2,
     CheckCircle,
     XCircle,
     Loader2,
@@ -28,6 +31,7 @@ import {
     Trash2,
     History,
     Play,
+    Image as ImageIcon,
 } from "lucide-react";
 import katex from "katex";
 import "katex/dist/katex.min.css";
@@ -40,6 +44,7 @@ type UserAnswers = Record<number, string | boolean | Record<string, string>>;
 
 export function ExamGeneratorTab({ courseId }: ExamGeneratorTabProps) {
     const supabase = createClient();
+    const { addTask, updateTask, tasks } = useGeneration();
 
     // Material selection
     const [selectedMaterialIds, setSelectedMaterialIds] = useState<string[]>([]);
@@ -79,6 +84,11 @@ export function ExamGeneratorTab({ courseId }: ExamGeneratorTabProps) {
     const [savedExams, setSavedExams] = useState<any[]>([]);
     const [loadingExams, setLoadingExams] = useState(false);
 
+    // Check if exam generation is already running
+    const activeExamTask = tasks.find(
+        t => t.type === 'quiz' && t.courseId === courseId && (t.status === 'pending' || t.status === 'processing')
+    );
+
     // Fetch saved exams
     const fetchSavedExams = useCallback(async () => {
         setLoadingExams(true);
@@ -92,13 +102,6 @@ export function ExamGeneratorTab({ courseId }: ExamGeneratorTabProps) {
         }
     }, [courseId]);
 
-    // Initial fetch
-    useState(() => {
-        fetchSavedExams();
-    }); // Using useState initializer essentially as useEffect on mount but cleaner to use useEffect
-
-    // Using useEffect properly
-    const useEffect = require("react").useEffect;
     useEffect(() => {
         fetchSavedExams();
     }, [fetchSavedExams]);
@@ -204,6 +207,8 @@ export function ExamGeneratorTab({ courseId }: ExamGeneratorTabProps) {
             return;
         }
 
+        const taskId = uuidv4();
+
         setLoading(true);
         setError("");
         setExamResults(null);
@@ -211,8 +216,19 @@ export function ExamGeneratorTab({ courseId }: ExamGeneratorTabProps) {
         setSubmitted(false);
         setEvaluations({});
 
+        // Add task to global context
+        addTask({
+            id: taskId,
+            type: 'quiz',
+            status: 'processing',
+            progress: 10,
+            message: `Generating exam from ${selectedMaterialIds.length} file(s)...`,
+            courseId,
+        });
+
         try {
             setProgress("Fetching materials from knowledge base...");
+            updateTask(taskId, { progress: 20, message: "Fetching materials..." });
 
             // Fetch materials from Supabase
             const { data: materials, error: fetchError } = await supabase
@@ -225,6 +241,7 @@ export function ExamGeneratorTab({ courseId }: ExamGeneratorTabProps) {
             }
 
             setProgress("Downloading files...");
+            updateTask(taskId, { progress: 40, message: "Downloading files..." });
 
             // Download each file and convert to base64
             const filesData = await Promise.all(
@@ -249,14 +266,17 @@ export function ExamGeneratorTab({ courseId }: ExamGeneratorTabProps) {
             );
 
             setProgress("Generating exam with AI...");
+            updateTask(taskId, { progress: 60, message: "Generating exam with AI..." });
 
             const result = await generateExam(filesData, options);
 
             setExamResults(result);
             setProgress("");
+            updateTask(taskId, { status: 'completed', progress: 100, message: "Exam ready!" });
         } catch (err: any) {
             console.error("Error generating exam:", err);
             setError(err.message || "Failed to generate exam. Please try again.");
+            updateTask(taskId, { status: 'failed', message: err.message || "Generation failed" });
         } finally {
             setLoading(false);
         }
@@ -635,7 +655,7 @@ export function ExamGeneratorTab({ courseId }: ExamGeneratorTabProps) {
                 {/* Figure Description Box */}
                 <div className="p-4 rounded-xl bg-foreground/5 border border-foreground/10">
                     <div className="flex items-center gap-2 mb-3">
-                        <span className="text-xl">🖼️</span>
+                        <span className="text-xl"><ImageIcon className="w-5 h-5 text-foreground/70" /></span>
                         <strong>Figure Description</strong>
                         <span className="ml-auto px-2 py-1 text-xs rounded-full bg-primary/20 text-primary">
                             {figDesc?.format?.figure_type || "Diagram"}
@@ -778,8 +798,8 @@ export function ExamGeneratorTab({ courseId }: ExamGeneratorTabProps) {
         return (
             <div className={`p-4 rounded-xl border ${getStatusClass()}`}>
                 <div className="flex items-center justify-between mb-3">
-                    <span className="font-bold">
-                        {summary?.status === "correct" && "✅ Correct!"}
+                    <span className="font-bold flex items-center gap-2">
+                        {summary?.status === "correct" && <><CheckCircle2 className="w-5 h-5 text-green-500" /> Correct!</>}
                         {summary?.status === "partial" && "⚠️ Partially Correct"}
                         {summary?.status === "incorrect" && "❌ Incorrect"}
                     </span>
@@ -936,7 +956,7 @@ export function ExamGeneratorTab({ courseId }: ExamGeneratorTabProps) {
                 {/* Source reference */}
                 {question.source_ref && (
                     <div className="mt-4 text-xs text-foreground/40">
-                        📚 {question.source_ref}
+                        {question.source_ref}
                     </div>
                 )}
             </div>
@@ -1045,7 +1065,7 @@ export function ExamGeneratorTab({ courseId }: ExamGeneratorTabProps) {
                     <section className="p-6 rounded-2xl bg-card-bg/60 backdrop-blur border border-card-border">
                         <h2 className="text-lg font-bold mb-4 flex items-center gap-2">
                             <FileText className="w-5 h-5" />
-                            📚 Select Source Materials
+                            Select Source Materials
                         </h2>
                         <MaterialSelector
                             courseId={courseId}
@@ -1061,7 +1081,7 @@ export function ExamGeneratorTab({ courseId }: ExamGeneratorTabProps) {
                             onClick={() => setConfigExpanded(!configExpanded)}
                         >
                             <h2 className="text-lg font-bold flex items-center gap-2">
-                                ⚙️ Exam Configuration
+                                Exam Configuration
                             </h2>
                             {configExpanded ? (
                                 <ChevronUp className="w-5 h-5" />
@@ -1257,7 +1277,7 @@ export function ExamGeneratorTab({ courseId }: ExamGeneratorTabProps) {
                         <button
                             onClick={handleGenerateExam}
                             disabled={loading || selectedMaterialIds.length === 0}
-                            className="w-full py-4 rounded-2xl bg-gradient-to-r from-primary to-purple-500 text-white font-bold text-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3 hover:shadow-lg hover:shadow-primary/30 transition-all"
+                            className="w-full py-4 rounded-2xl bg-foreground text-background font-bold text-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3 hover:opacity-90 transition-all"
                         >
                             {loading ? (
                                 <>
@@ -1267,7 +1287,7 @@ export function ExamGeneratorTab({ courseId }: ExamGeneratorTabProps) {
                             ) : (
                                 <>
                                     <Sparkles className="w-5 h-5" />
-                                    🎯 Generate Exam
+                                    Generate Exam
                                 </>
                             )}
                         </button>
@@ -1286,7 +1306,7 @@ export function ExamGeneratorTab({ courseId }: ExamGeneratorTabProps) {
                             {/* Results Header */}
                             <div className="p-6 rounded-2xl bg-card-bg/60 backdrop-blur border border-card-border">
                                 <h2 className="text-xl font-bold mb-4">
-                                    🎉 Exam Generated Successfully!
+                                    Exam Generated Successfully!
                                 </h2>
 
                                 {examResults.quiz_metadata && (

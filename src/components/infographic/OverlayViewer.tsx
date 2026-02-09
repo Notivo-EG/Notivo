@@ -119,7 +119,7 @@ export function OverlayViewer({ infographic, onClose }: OverlayViewerProps) {
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
-                className="fixed inset-0 z-50 flex flex-col bg-black/90 backdrop-blur-sm"
+                className="fixed inset-0 z-[9999] flex flex-col bg-black/90 backdrop-blur-sm"
                 ref={containerRef}
             >
                 {/* Top bar */}

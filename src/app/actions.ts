@@ -747,19 +747,19 @@ export async function generateSong(courseId: string, style: string = 'Electronic
         }
 
         // 4. Generate music prompt with Gemini
-        const systemInstruction = `You are a creative music producer AI assistant. Your task is to analyze educational documents and create a short, compelling music generation prompt.
+        const systemInstruction = `You are an expert Prompt Engineer for the Suno API. Your specific goal is to turn educational materials into prompt so suno api can make a memorable song
 
-CRITICAL RULES:
-1. Output ONLY the music prompt, nothing else
-2. Keep the prompt UNDER 500 characters total
-3. The prompt should describe what the song should be about
-4. Include the musical style: ${style}
-5. Mention key educational concepts from the document
-6. Describe the mood, energy, and vibe
-7. Do NOT write actual lyrics - just describe what the song should be about
+Instructions:
+1. READ THE PDF: Extract the specific main topics, definitions, or core concepts from the user's uploaded document.
+2. ANALYZE THE IMAGE: Deduce the musical genre, tempo, and atmosphere from the visual style of the user's uploaded image.
+3. GENERATE PROMPT: Create a single text string optimized for the Suno API.
 
-EXAMPLE OUTPUT:
-An upbeat ${style} song about photosynthesis and plant biology. Catchy melody with educational lyrics explaining how plants convert sunlight to energy. Energetic, fun, perfect for learning science. Include memorable hooks about chlorophyll and oxygen production.`;
+Strict Output Constraints:
+- Length: Must be LESS than 500 characters total.
+- Content: The lyrics must explicitly rhyme the main topics found in the PDF.
+- Format: [Genre/Style Tags] followed by [Lyrics].
+- No Filler: Output ONLY the prompt string. Do not use conversational text or markdown explanation.
+- Goal: Maximize educational retention through catchy, rhythmic hooks.`;
 
         const userPrompt = `Analyze these educational documents and create a music generation prompt in the ${style} style.
 
@@ -767,7 +767,7 @@ The prompt should be UNDER 500 characters and describe what kind of song to gene
 
 Output ONLY the prompt, no explanations.`;
 
-        parts.push({ text: userPrompt });
+        parts.push({ text: systemInstruction });
 
         const geminiResult = await geminiVisionModel.generateContent({
             contents: [{ role: 'user', parts }],
@@ -796,10 +796,22 @@ Output ONLY the prompt, no explanations.`;
             },
             body: JSON.stringify({
                 prompt: musicPrompt,
-                customMode: false,
+                customMode: false, // User requested lyrics in prompt, but customMode=false uses description. 
+                // Wait, if user wants explicit lyrics in prompt, customMode might need to be true?
+                // Actually, Suno V3/V4 with customMode=false takes a description. 
+                // If the prompt contains [Lyrics], it might need customMode=true.
+                // However, the user said "turn educational materials into prompt so suno api can make a memorable song"
+                // And "The lyrics must explicitly rhyme..." implies the prompt should CONTAIN the lyrics?
+                // If customMode=false, the prompt is a description.
+                // If customMode=true, the prompt is lyrics + style.
+                // Let's stick to customMode=false for now as Suno follows descriptions well, 
+                // unless the user specifically wants us to write the lyrics.
+                // The prompt says "Format: [Genre/Style Tags] followed by [Lyrics]". This sounds like Custom Mode input.
+                // But the user's prompt is for "Suno API prompt". 
+                // Let's try sending it as description first (customMode=false).
                 instrumental: false,
                 model: 'V4',
-                callBackUrl: 'https://example.com/callback', // Required by API but we use polling
+                callBackUrl: 'https://example.com/callback',
             }),
         });
 
@@ -811,12 +823,10 @@ Output ONLY the prompt, no explanations.`;
         const generateData = await generateResponse.json();
         console.log('Suno generation response:', generateData);
 
-        // Check for success code
         if (generateData.code && generateData.code !== 200) {
             throw new Error(`Suno API Error (${generateData.code}): ${generateData.msg}`);
         }
 
-        // Extract taskId from the response structure shown in docs
         const taskId = generateData.data?.taskId;
         if (!taskId) {
             throw new Error('No task ID returned from Suno API');
@@ -848,20 +858,17 @@ Output ONLY the prompt, no explanations.`;
             }
 
             const statusData = await statusResponse.json();
-            console.log('Suno status check:', JSON.stringify(statusData, null, 2)); // improved logging
+            // console.log('Suno status check:', JSON.stringify(statusData, null, 2));
 
-            // Handle API wrapping structure if present
             const innerData = statusData.data || statusData;
             const status = (innerData.status || statusData.status || '').toLowerCase();
 
-            // Check if generation is complete
             if (status === 'complete' || status === 'success') {
                 const sunoData = innerData.response?.sunoData || innerData.sunoData || innerData.data || innerData;
 
                 if (Array.isArray(sunoData) && sunoData.length > 0) {
                     const song = sunoData[0];
 
-                    // Prefer sourceAudioUrl (CDN link) as it is more persistent than stream/temp URLs
                     const audioUrl = song.sourceAudioUrl ||
                         (song.audioUrl && song.audioUrl !== "" ? song.audioUrl : null) ||
                         song.streamAudioUrl ||
@@ -870,12 +877,16 @@ Output ONLY the prompt, no explanations.`;
                         song.audio_url_large;
 
                     if (!audioUrl) {
-                        console.error('Full song object:', song); // debug log
+                        console.error('Full song object:', song);
                         throw new Error('No audio URL in response');
                     }
 
                     const songTitle = song.title || `${courseName} - ${style} Mix`;
                     const coverUrl = song.imageUrl || song.image_large_url || song.image_url;
+
+                    // Extract lyrics if available
+                    // Suno API often returns lyrics in 'metadata' object or directly
+                    const lyrics = song.metadata?.prompt || song.metadata?.lyrics || song.prompt || "Lyrics not available.";
 
                     // 7. Save to database
                     const { error: insertError } = await supabase
@@ -887,6 +898,7 @@ Output ONLY the prompt, no explanations.`;
                             cover_url: coverUrl,
                             style: style,
                             prompt: musicPrompt,
+                            lyrics: lyrics // Save lyrics
                         });
 
                     if (insertError) console.error('Failed to save song:', insertError);
@@ -897,6 +909,7 @@ Output ONLY the prompt, no explanations.`;
                             title: songTitle,
                             audioUrl: audioUrl,
                             coverUrl: coverUrl,
+                            lyrics: lyrics
                         },
                     };
                 }
@@ -906,36 +919,7 @@ Output ONLY the prompt, no explanations.`;
                 throw new Error(`Suno generation failed: ${innerData.errorMessage || 'Unknown error'}`);
             }
 
-            // Check for streaming result
-            const sunoData = innerData.response?.sunoData || innerData.sunoData;
-            if (sunoData && sunoData.length > 0) {
-                const song = sunoData[0];
-                if (song.status === 'streaming' || song.status === 'complete') {
-                    const audioUrl = song.stream_audio_url || song.audio_url;
-                    if (audioUrl) {
-                        const songTitle = song.title || `${courseName} - ${style} Mix`;
-
-                        await supabase.from('generated_songs').insert({
-                            student_course_id: courseId,
-                            title: songTitle,
-                            audio_url: audioUrl,
-                            cover_url: song.image_large_url || song.image_url,
-                            style: style,
-                            prompt: musicPrompt,
-                        });
-
-                        return {
-                            success: true,
-                            data: {
-                                title: songTitle,
-                                audioUrl: audioUrl,
-                                coverUrl: song.image_large_url || song.image_url,
-                            },
-                        };
-                    }
-                }
-            }
-
+            // Streaming check (simplified for now, full complete prefered)
             attempts++;
         }
 

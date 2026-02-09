@@ -4,7 +4,9 @@ import "./globals.css";
 import { Navbar } from "@/components/Navbar";
 import { PreferencesProvider } from "@/context/PreferencesContext";
 import { GenerationProvider } from "@/context/GenerationContext";
+import { PlayerProvider } from "@/context/PlayerContext";
 import { ActivityIndicator } from "@/components/ui/ActivityIndicator";
+import { GlobalPlayer } from "@/components/ui/GlobalPlayer";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -34,11 +36,14 @@ export default function RootLayout({
       >
         <PreferencesProvider>
           <GenerationProvider>
-            <div className="flex">
-              <Navbar />
-              <main className="flex-1 min-h-screen">{children}</main>
-              <ActivityIndicator />
-            </div>
+            <PlayerProvider>
+              <div className="flex">
+                <Navbar />
+                <main className="flex-1 min-h-screen pb-24">{children}</main>
+                <ActivityIndicator />
+              </div>
+              <GlobalPlayer />
+            </PlayerProvider>
           </GenerationProvider>
         </PreferencesProvider>
         <script

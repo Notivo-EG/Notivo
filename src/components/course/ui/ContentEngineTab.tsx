@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { usePreferences } from "@/context/PreferencesContext";
 import { FileUpload } from "@/components/FileUpload";
-import { BookOpen, Layers, FileText, Loader2, Save } from "lucide-react";
+import { BookOpen, Layers, FileText, Loader2, Save, Upload, CheckCircle2, Trash2 } from "lucide-react";
 import { uploadBrainMaterial } from "@/app/actions";
 
 export function ContentEngineTab({ courseId }: { courseId: string }) {
@@ -54,11 +54,33 @@ export function ContentEngineTab({ courseId }: { courseId: string }) {
         }
     };
 
+    const deleteMaterial = async (e: React.MouseEvent, id: string) => {
+        e.stopPropagation();
+        if (!confirm("Delete this material? This will remove it from the knowledge base.")) return;
+
+        const { error } = await supabase
+            .from('course_materials')
+            .delete()
+            .eq('id', id);
+
+        if (!error) {
+            setMaterials(prev => prev.filter(m => m.id !== id));
+        } else {
+            console.error(error);
+            alert("Failed to delete material");
+        }
+    };
+
     return (
-        <div className="grid md:grid-cols-2 gap-8">
-            {/* Upload Section */}
-            <div className="space-y-6">
-                <div className="p-1">
+        <div className="grid lg:grid-cols-3 gap-8">
+            {/* LEFT: Upload & Textbook */}
+            <div className="lg:col-span-1 space-y-6">
+                {/* Upload Section */}
+                <div className="bg-card-bg border border-card-border rounded-2xl p-6">
+                    <h3 className="text-sm font-bold text-foreground/70 flex items-center gap-2 mb-4">
+                        <Upload className="w-4 h-4" />
+                        Upload Materials
+                    </h3>
                     <FileUpload
                         onFileSelect={handleUpload}
                         isProcessing={isUploading}
@@ -66,54 +88,76 @@ export function ContentEngineTab({ courseId }: { courseId: string }) {
                     />
                 </div>
 
-                <div className="p-8 rounded-[2.5rem] bg-card-bg border border-card-border">
-                    <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
-                        <BookOpen className="text-blue-400" />
-                        <span className="text-foreground">Reference Textbook</span>
+                {/* Reference Textbook */}
+                <div className="bg-card-bg border border-card-border rounded-2xl p-6">
+                    <h3 className="text-sm font-bold text-foreground/70 flex items-center gap-2 mb-4">
+                        <BookOpen className="w-4 h-4" />
+                        Reference Textbook
                     </h3>
-                    <div className="flex gap-2">
+                    <div className="space-y-3">
                         <input
-                            placeholder="Enter Textbook Name (e.g. Calculus by Stewart)"
-                            className="flex-1 bg-background border border-card-border rounded-xl px-4 py-3 focus:outline-none focus:border-purple-500 transition-colors text-foreground placeholder:text-foreground/30"
+                            placeholder="Enter Textbook Name..."
+                            className="w-full bg-foreground/5 border border-card-border rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-primary/50 transition-colors text-foreground placeholder:text-foreground/30"
                         />
-                        <button className="px-6 py-3 rounded-xl bg-purple-600 hover:bg-purple-500 font-bold transition-colors text-white">
-                            Set
+                        <button className="w-full py-3 rounded-xl bg-foreground text-background font-bold text-sm hover:opacity-90 transition-opacity">
+                            Set Textbook
                         </button>
                     </div>
-                    <p className="text-foreground/30 text-sm mt-3">
-                        Or upload a PDF if you have it. The AI uses this to "Prune" reading lists.
+                    <p className="text-foreground/30 text-xs mt-3">
+                        The AI uses this to "Prune" reading lists.
                     </p>
                 </div>
             </div>
 
-            {/* Status Section */}
-            <div className="space-y-4">
-                <h3 className="text-xl font-bold text-foreground/60">Knowledge Base</h3>
+            {/* RIGHT: Knowledge Base List */}
+            <div className="lg:col-span-2">
+                <h3 className="text-lg font-bold mb-4 flex items-center gap-2 text-foreground/80">
+                    <Layers className="w-5 h-5" />
+                    Knowledge Base
+                </h3>
+
                 {materials.length === 0 ? (
-                    <div className="p-6 rounded-2xl bg-card-bg border border-card-border flex flex-col items-center justify-center h-[300px] text-center">
-                        <Layers className="w-12 h-12 text-foreground/20 mb-4" />
-                        <p className="text-foreground/40">No materials uploaded yet.</p>
-                        <p className="text-foreground/20 text-sm">Upload slides to activate the Content Engine.</p>
+                    <div className="h-[400px] border-2 border-dashed border-foreground/10 rounded-2xl flex flex-col items-center justify-center text-foreground/30">
+                        <Layers className="w-12 h-12 mb-4 opacity-50" />
+                        <p>No materials uploaded yet.</p>
+                        <p className="text-sm">Upload slides to activate the Content Engine.</p>
                     </div>
                 ) : (
-                    <div className="space-y-3 h-[400px] overflow-y-auto pr-2 custom-scrollbar">
-                        {materials.map((m) => (
-                            <div key={m.id} className="p-4 rounded-xl bg-card-bg border border-card-border flex items-center gap-4 hover:bg-foreground/5 transition-colors">
-                                <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${m.type === 'slide' ? 'bg-blue-500/10 text-blue-500 dark:text-blue-400' : 'bg-green-500/10 text-green-500 dark:text-green-400'}`}>
-                                    {m.type === 'slide' ? <Layers size={20} /> : <FileText size={20} />}
+                    <div className="grid gap-3">
+                        {materials.map((m, idx) => {
+                            const visualIndex = materials.length - idx;
+                            return (
+                                <div key={m.id} className="p-4 rounded-xl bg-card-bg border border-card-border flex items-center gap-4 hover:bg-foreground/5 transition-colors group">
+                                    <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${m.type === 'slide' ? 'bg-blue-500/10 text-blue-500' : 'bg-green-500/10 text-green-500'}`}>
+                                        {m.type === 'slide' ? <Layers size={20} /> : <FileText size={20} />}
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-xs font-bold text-foreground/30">#{visualIndex}</span>
+                                            <h4 className="font-medium text-foreground truncate">{m.title}</h4>
+                                        </div>
+                                        <p className="text-xs text-foreground/40 capitalize flex items-center gap-2 mt-0.5">
+                                            {m.type} • {new Date(m.created_at).toLocaleDateString()}
+                                        </p>
+                                    </div>
+                                    <div className="px-3 py-1 rounded-full bg-green-500/10 text-green-500 text-xs font-medium flex items-center gap-1">
+                                        <CheckCircle2 className="w-3 h-3" />
+                                        AI Ready
+                                    </div>
+                                    <button
+                                        onClick={(e) => deleteMaterial(e, m.id)}
+                                        className="p-2 rounded-lg text-foreground/20 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                                        title="Delete Material"
+                                    >
+                                        <Trash2 className="w-4 h-4" />
+                                    </button>
+
                                 </div>
-                                <div className="flex-1 min-w-0">
-                                    <h4 className="font-medium text-foreground truncate">{m.title}</h4>
-                                    <p className="text-xs text-foreground/40 capitalize">{m.type} • Week {m.week_number || '?'}</p>
-                                </div>
-                                <div className="text-xs px-2 py-1 rounded bg-foreground/10 text-foreground/60">
-                                    AI Ready
-                                </div>
-                            </div>
-                        ))}
+                            );
+                        })}
                     </div>
                 )}
             </div>
-        </div>
+        </div >
     );
 }
