@@ -109,8 +109,15 @@ export interface EvaluationResult {
   };
 }
 
-// Build the prompt based on options
-function buildPrompt(options: ExamOptions): string {
+// Build the prompt based on options and file categories
+function buildPrompt(options: ExamOptions, fileCategories?: { filename: string; category: string }[]): string {
+  // Detect which files are style references (past exams / problem sheets)
+  const styleRefFiles = (fileCategories || []).filter(
+    f => f.category === "past_exam" || f.category === "problem_sheet" || f.category === "sheet"
+  );
+  const contentFiles = (fileCategories || []).filter(
+    f => f.category !== "past_exam" && f.category !== "problem_sheet" && f.category !== "sheet"
+  );
   const prompt = {
     meta: {
       task: "analyze_and_generate_quiz",
@@ -278,6 +285,24 @@ function buildPrompt(options: ExamOptions): string {
       instruction:
         "This is a unique session. Generate completely fresh questions different from any previous generation.",
     },
+    ...(styleRefFiles.length > 0
+      ? {
+          STYLE_REFERENCE: {
+            instruction:
+              "Some of the attached files are PAST EXAMS or PROBLEM SHEETS. These are STYLE REFERENCES ONLY. You MUST analyze their question FORMAT, STRUCTURE, DIFFICULTY PATTERN, and PHRASING STYLE (e.g., how they word MCQs, how they structure calculation problems, what kind of scenarios they use). Then generate NEW questions that follow the SAME style, form, and theme — but with COMPLETELY DIFFERENT content, numbers, scenarios, and wording. NEVER copy, rephrase, or reuse any question from these reference files. Treat them as a template for the question style, NOT as a source of questions.",
+            style_reference_files: styleRefFiles.map((f) => f.filename),
+            content_source_files: contentFiles.length > 0 ? contentFiles.map((f) => f.filename) : ["Use all provided files for topic scope"],
+            rules: [
+              "Extract the PATTERN of each question type from the style reference files (e.g., 'Given X, find Y' or 'Which of the following best describes...').",
+              "Use the CONTENT/TOPIC material from lecture slides, notes, or textbooks to determine WHAT to ask about.",
+              "Combine the style patterns with the content topics to produce original questions.",
+              "Match the difficulty distribution and question complexity of the reference exams.",
+              "If the reference exam has specific section structures (e.g., Part A: MCQ, Part B: Problems), mirror that structure.",
+              "NEVER include any question whose answer or scenario appears in the reference files.",
+            ],
+          },
+        }
+      : {}),
   };
 
   return JSON.stringify(prompt, null, 2);
@@ -285,7 +310,7 @@ function buildPrompt(options: ExamOptions): string {
 
 // Main function to generate exam
 export async function generateExam(
-  files: { filename: string; content: string; mimeType: string }[],
+  files: { filename: string; content: string; mimeType: string; category?: string }[],
   options: ExamOptions,
 ): Promise<ExamResult> {
   const apiKey = process.env.GEMINI_API_KEY;
@@ -308,8 +333,9 @@ export async function generateExam(
       model: "gemini-3-pro-preview",
     });
 
-    const prompt = buildPrompt(options);
-    const fullPrompt = `${prompt}\n\nGenerate the exam based on the above configuration and the provided lecture materials.`;
+    const fileCategories = files.map(f => ({ filename: f.filename, category: f.category || "notes" }));
+    const prompt = buildPrompt(options, fileCategories);
+    const fullPrompt = `${prompt}\n\nGenerate the exam based on the above configuration and the provided materials.`;
 
     const result = await model.generateContent({
       contents: [
@@ -317,7 +343,7 @@ export async function generateExam(
           role: "user",
           parts: [
             {
-              text: "These are lecture materials for generating exam questions.",
+              text: `These are course materials for generating exam questions. File categories: ${files.map(f => `"${f.filename}" (${f.category || "notes"})`).join(", ")}. Files marked as "past_exam" or "problem_sheet" are STYLE REFERENCES — mimic their question format but never copy their questions.`,
             },
             ...fileParts,
             { text: fullPrompt },

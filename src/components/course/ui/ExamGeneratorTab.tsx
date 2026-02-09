@@ -300,6 +300,7 @@ export function ExamGeneratorTab({ courseId }: ExamGeneratorTabProps) {
                         filename: m.title.endsWith(".pdf") ? m.title : `${m.title}.pdf`,
                         content: base64,
                         mimeType: "application/pdf",
+                        category: m.type || "notes",
                     };
                 })
             );

@@ -93,6 +93,24 @@ export function ContentEngineTab({ courseId }: { courseId: string }) {
         e.stopPropagation();
         if (!confirm("Delete this material? This will remove it from the knowledge base.")) return;
 
+        // Find the material to get its storage path
+        const material = materials.find(m => m.id === id);
+
+        // Delete from storage if content_url exists
+        if (material?.content_url) {
+            try {
+                // Extract storage path from the public URL
+                const url = new URL(material.content_url);
+                const pathMatch = url.pathname.match(/\/storage\/v1\/object\/public\/materials\/(.+)/);
+                if (pathMatch) {
+                    await supabase.storage.from('materials').remove([pathMatch[1]]);
+                }
+            } catch (err) {
+                console.error("Failed to delete file from storage:", err);
+            }
+        }
+
+        // Delete from database
         const { error } = await supabase
             .from('course_materials')
             .delete()
