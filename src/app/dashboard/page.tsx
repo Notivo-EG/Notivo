@@ -1,21 +1,44 @@
 "use client";
 
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import {
     GraduationCap,
     Plus,
     ArrowRight,
-    Settings,
     MoreVertical,
     MapPin,
-    Calendar,
-    Loader2
+    Loader2,
+    Pencil,
+    Trash2,
+    Search,
+    Building2,
+    X
 } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import { usePreferences } from "@/context/PreferencesContext";
+
+const UNIVERSITIES = [
+    "Cairo University",
+    "Ain Shams University",
+    "Alexandria University",
+    "MIT",
+    "Stanford University",
+    "Harvard University",
+];
+
+const MAJORS = [
+    "Computer Science",
+    "Mechanical Engineering",
+    "Electrical Engineering",
+    "Medicine",
+    "Pharmacy",
+    "Civil Engineering",
+    "Architecture",
+    "Business Administration",
+];
 
 // Define the shape of our enrollment data (matching the SQL table + join)
 interface Enrollment {
@@ -34,6 +57,107 @@ export default function GlobalDashboard() {
     const { playSound } = usePreferences();
     const [enrollments, setEnrollments] = useState<Enrollment[]>([]);
     const [loading, setLoading] = useState(true);
+    const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+    const menuRef = useRef<HTMLDivElement>(null);
+
+    // Edit modal state
+    const [editingEnrollment, setEditingEnrollment] = useState<Enrollment | null>(null);
+    const [editStep, setEditStep] = useState<1 | 2>(1);
+    const [editUniversity, setEditUniversity] = useState("");
+    const [editMajor, setEditMajor] = useState("");
+    const [editUniSearch, setEditUniSearch] = useState("");
+    const [editMajorSearch, setEditMajorSearch] = useState("");
+    const [editSaving, setEditSaving] = useState(false);
+
+    // Close menu when clicking outside
+    useEffect(() => {
+        const handleClickOutside = (e: MouseEvent) => {
+            if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+                setOpenMenuId(null);
+            }
+        };
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, []);
+
+    const handleDelete = async (enrollmentId: string) => {
+        if (!confirm("Are you sure you want to delete this enrollment? All related courses will also be deleted.")) return;
+
+        try {
+            const { error } = await supabase
+                .from('enrollments')
+                .delete()
+                .eq('id', enrollmentId);
+
+            if (error) throw error;
+
+            setEnrollments(prev => prev.filter(e => e.id !== enrollmentId));
+            setOpenMenuId(null);
+        } catch (err) {
+            console.error("Error deleting enrollment:", err);
+            alert("Failed to delete enrollment");
+        }
+    };
+
+    const openEditModal = (enrollment: Enrollment) => {
+        setEditingEnrollment(enrollment);
+        setEditUniversity(enrollment.university_name);
+        setEditMajor(enrollment.program_name);
+        setEditStep(1);
+        setEditUniSearch("");
+        setEditMajorSearch("");
+        setOpenMenuId(null);
+    };
+
+    const closeEditModal = () => {
+        setEditingEnrollment(null);
+        setEditSaving(false);
+    };
+
+    const handleEditSave = async () => {
+        if (!editingEnrollment) return;
+
+        if (editStep === 1 && editUniversity) {
+            setEditStep(2);
+            return;
+        }
+
+        if (editStep === 2 && editMajor) {
+            try {
+                setEditSaving(true);
+                const { error } = await supabase
+                    .from('enrollments')
+                    .update({
+                        university_name: editUniversity,
+                        program_name: editMajor,
+                    })
+                    .eq('id', editingEnrollment.id);
+
+                if (error) throw error;
+
+                setEnrollments(prev =>
+                    prev.map(e =>
+                        e.id === editingEnrollment.id
+                            ? { ...e, university_name: editUniversity, program_name: editMajor }
+                            : e
+                    )
+                );
+                closeEditModal();
+            } catch (err) {
+                console.error("Error updating enrollment:", err);
+                alert("Failed to update enrollment");
+            } finally {
+                setEditSaving(false);
+            }
+        }
+    };
+
+    const filteredEditUniversities = UNIVERSITIES.filter(u =>
+        u.toLowerCase().includes(editUniSearch.toLowerCase())
+    );
+    const filteredEditMajors = MAJORS.filter(m =>
+        m.toLowerCase().includes(editMajorSearch.toLowerCase())
+    );
 
     useEffect(() => {
         const fetchEnrollments = async () => {
@@ -46,13 +170,21 @@ export default function GlobalDashboard() {
 
                 const { data, error } = await supabase
                     .from('enrollments')
-                    .select('*')
+                    .select('*, student_courses(id, status)')
                     .eq('user_id', user.id);
 
                 if (error) throw error;
 
-                // For now, we mock progress as 0 since we haven't built course tracking yet
-                const enrollmentsWithProgress = (data || []).map(e => ({ ...e, progress: 0 }));
+                // Calculate progress: (done courses / total courses) * 100
+                const enrollmentsWithProgress = (data || []).map(e => {
+                    const courses = (e.student_courses ?? []) as { id: string; status: string }[];
+                    const total = courses.length;
+                    const done = courses.filter(c => c.status === 'done').length;
+                    const progress = total > 0 ? Math.round((done / total) * 100) : 0;
+                    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+                    const { student_courses: _sc, ...rest } = e;
+                    return { ...rest, progress };
+                });
                 setEnrollments(enrollmentsWithProgress);
             } catch (err) {
                 console.error("Error fetching enrollments:", err);
@@ -81,7 +213,7 @@ export default function GlobalDashboard() {
                     </div>
 
                     {/* Add New Major Button */}
-                    <Link href="/setup" onClick={() => playSound("click")}>
+                    <Link href="/setup?new=true" onClick={() => playSound("click")}>
                         <button className="relative group flex items-center gap-2 px-8 py-4 bg-gradient-to-r from-cyan-500/20 via-blue-500/20 to-purple-500/20 dark:from-cyan-500/20 dark:via-blue-500/20 dark:to-purple-500/20 bg-white/50 dark:bg-black/20 backdrop-blur-md rounded-full font-medium text-slate-800 dark:text-white transition-all hover:brightness-110 md:hover:brightness-125 dark:hover:brightness-150 hover:shadow-[0_0_30px_rgba(37,99,235,0.4)] active:scale-95 border border-card-border overflow-hidden">
                             <div className="absolute inset-0 rounded-full shadow-[inset_0_1px_0_rgba(255,255,255,0.2)] pointer-events-none" />
                             <div className="absolute inset-0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000 bg-gradient-to-r from-transparent via-white/20 to-transparent" />
@@ -119,9 +251,50 @@ export default function GlobalDashboard() {
                                         <div className="absolute inset-0 bg-foreground/5 dark:bg-white/5" />
                                         <GraduationCap className="w-8 h-8 drop-shadow-lg relative z-10" />
                                     </div>
-                                    <button onClick={() => playSound("click")} className="p-2 rounded-full hover:bg-foreground/5 text-foreground/20 hover:text-foreground transition-colors">
-                                        <MoreVertical className="w-5 h-5" />
-                                    </button>
+                                    <div className="relative" ref={openMenuId === enrollment.id ? menuRef : undefined}>
+                                        <button
+                                            onClick={() => {
+                                                playSound("click");
+                                                setOpenMenuId(openMenuId === enrollment.id ? null : enrollment.id);
+                                            }}
+                                            className="p-2 rounded-full hover:bg-foreground/5 text-foreground/20 hover:text-foreground transition-colors"
+                                        >
+                                            <MoreVertical className="w-5 h-5" />
+                                        </button>
+
+                                        <AnimatePresence>
+                                            {openMenuId === enrollment.id && (
+                                                <motion.div
+                                                    initial={{ opacity: 0, scale: 0.9, y: -4 }}
+                                                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                                                    exit={{ opacity: 0, scale: 0.9, y: -4 }}
+                                                    transition={{ duration: 0.15 }}
+                                                    className="absolute right-0 top-full mt-2 w-44 bg-card-bg/90 dark:bg-black/80 backdrop-blur-xl border border-card-border rounded-xl shadow-2xl overflow-hidden z-50"
+                                                >
+                                                    <button
+                                                        onClick={() => {
+                                                            playSound("click");
+                                                            openEditModal(enrollment);
+                                                        }}
+                                                        className="w-full flex items-center gap-3 px-4 py-3 text-sm text-foreground/70 hover:bg-foreground/5 hover:text-foreground transition-colors"
+                                                    >
+                                                        <Pencil className="w-4 h-4" />
+                                                        Edit
+                                                    </button>
+                                                    <button
+                                                        onClick={() => {
+                                                            playSound("click");
+                                                            handleDelete(enrollment.id);
+                                                        }}
+                                                        className="w-full flex items-center gap-3 px-4 py-3 text-sm text-red-400 hover:bg-red-500/10 hover:text-red-300 transition-colors"
+                                                    >
+                                                        <Trash2 className="w-4 h-4" />
+                                                        Delete
+                                                    </button>
+                                                </motion.div>
+                                            )}
+                                        </AnimatePresence>
+                                    </div>
                                 </div>
 
                                 {/* Info */}
@@ -179,25 +352,186 @@ export default function GlobalDashboard() {
                             </motion.div>
                         ))}
 
-                        {/* Quick Access Card */}
-                        <motion.div
-                            initial={{ opacity: 0, y: 20 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ delay: 0.2 }}
-                            onClick={() => playSound("click")}
-                            className="p-8 rounded-[2.5rem] border border-dashed border-foreground/10 hover:border-foreground/30 flex flex-col items-center justify-center text-center gap-6 transition-colors group cursor-pointer bg-card-bg/30 hover:bg-card-bg/60"
-                        >
-                            <div className="w-20 h-20 rounded-full bg-foreground/5 group-hover:bg-foreground/10 flex items-center justify-center transition-colors shadow-inner backdrop-blur-md">
-                                <Calendar className="w-8 h-8 text-foreground/40 group-hover:text-foreground transition-colors" />
-                            </div>
-                            <div>
-                                <h3 className="text-xl font-bold text-foreground mb-2">Global War Room</h3>
-                                <p className="text-foreground/40 text-sm max-w-[200px] mx-auto">View all upcoming exams across all majors</p>
-                            </div>
-                        </motion.div>
                     </div>
                 )}
             </div>
+
+            {/* Edit Modal */}
+            <AnimatePresence>
+                {editingEnrollment && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 z-50 flex items-center justify-center px-4"
+                    >
+                        {/* Backdrop */}
+                        <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={closeEditModal} />
+
+                        {/* Modal Card */}
+                        <motion.div
+                            key={editStep}
+                            initial={{ opacity: 0, scale: 0.95, y: 10 }}
+                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.95, y: 10 }}
+                            transition={{ duration: 0.3 }}
+                            className="relative w-full max-w-lg bg-card-bg/95 dark:bg-[#0a0a1a]/95 backdrop-blur-xl rounded-[2rem] p-8 border border-card-border shadow-2xl"
+                        >
+                            {/* Close button */}
+                            <button
+                                onClick={closeEditModal}
+                                className="absolute top-5 right-5 p-2 rounded-full hover:bg-foreground/5 text-foreground/30 hover:text-foreground transition-colors"
+                            >
+                                <X className="w-5 h-5" />
+                            </button>
+
+                            {/* Step indicator */}
+                            <div className="flex items-center justify-center gap-3 mb-6">
+                                <div className={`w-2.5 h-2.5 rounded-full transition-all duration-500 ${editStep >= 1 ? "bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)]" : "bg-foreground/10"}`} />
+                                <div className="w-10 h-0.5 bg-foreground/10 relative overflow-hidden rounded-full">
+                                    <motion.div
+                                        initial={{ width: 0 }}
+                                        animate={{ width: editStep >= 2 ? "100%" : "50%" }}
+                                        className="h-full bg-blue-500"
+                                    />
+                                </div>
+                                <div className={`w-2.5 h-2.5 rounded-full transition-all duration-500 ${editStep >= 2 ? "bg-cyan-500 shadow-[0_0_8px_rgba(6,182,212,0.5)]" : "bg-foreground/10"}`} />
+                            </div>
+
+                            {editStep === 1 ? (
+                                <>
+                                    <div className="flex items-center gap-3 mb-6">
+                                        <div className="w-12 h-12 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center">
+                                            <Building2 className="w-6 h-6 text-blue-400" />
+                                        </div>
+                                        <div>
+                                            <h2 className="text-xl font-bold text-foreground">Edit University</h2>
+                                            <p className="text-foreground/50 text-sm">Where are you studying?</p>
+                                        </div>
+                                    </div>
+
+                                    {/* Search */}
+                                    <div className="relative mb-4 group">
+                                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-foreground/30 group-focus-within:text-blue-400 transition-colors" />
+                                        <input
+                                            type="text"
+                                            value={editUniSearch}
+                                            onChange={(e) => setEditUniSearch(e.target.value)}
+                                            placeholder="Search universities..."
+                                            className="w-full pl-11 pr-4 py-3 rounded-xl bg-foreground/5 border border-foreground/10 text-foreground placeholder:text-foreground/20 focus:outline-none focus:border-blue-500/50 focus:ring-2 focus:ring-blue-500/20 transition-all text-sm"
+                                        />
+                                    </div>
+
+                                    {/* University List */}
+                                    <div className="space-y-1.5 max-h-56 overflow-y-auto pr-1">
+                                        {filteredEditUniversities.map((uni) => (
+                                            <button
+                                                key={uni}
+                                                onClick={() => setEditUniversity(uni)}
+                                                className={`w-full p-3.5 rounded-xl text-left transition-all border text-sm ${editUniversity === uni
+                                                    ? "bg-blue-600/15 border-blue-500/30 text-foreground shadow-sm"
+                                                    : "bg-foreground/[0.02] border-transparent text-foreground/70 hover:bg-foreground/5"
+                                                    }`}
+                                            >
+                                                <span className="font-medium">{uni}</span>
+                                            </button>
+                                        ))}
+                                        {filteredEditUniversities.length === 0 && editUniSearch && (
+                                            <button
+                                                onClick={() => setEditUniversity(editUniSearch)}
+                                                className="w-full p-3.5 rounded-xl text-left transition-all border bg-foreground/[0.02] border-dashed border-foreground/15 text-foreground/60 hover:text-foreground hover:border-blue-500/50 hover:bg-blue-500/10 text-sm"
+                                            >
+                                                <span className="block text-xs text-foreground/40">Not found? Use:</span>
+                                                <span className="font-bold text-blue-400">&quot;{editUniSearch}&quot;</span>
+                                            </button>
+                                        )}
+                                    </div>
+                                </>
+                            ) : (
+                                <>
+                                    <div className="flex items-center gap-3 mb-6">
+                                        <div className="w-12 h-12 rounded-xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center">
+                                            <GraduationCap className="w-6 h-6 text-cyan-400" />
+                                        </div>
+                                        <div>
+                                            <h2 className="text-xl font-bold text-foreground">Edit Major</h2>
+                                            <p className="text-foreground/50 text-sm">What are you studying at {editUniversity}?</p>
+                                        </div>
+                                    </div>
+
+                                    {/* Search */}
+                                    <div className="relative mb-4 group">
+                                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-foreground/30 group-focus-within:text-cyan-400 transition-colors" />
+                                        <input
+                                            type="text"
+                                            value={editMajorSearch}
+                                            onChange={(e) => setEditMajorSearch(e.target.value)}
+                                            placeholder="Search majors..."
+                                            className="w-full pl-11 pr-4 py-3 rounded-xl bg-foreground/5 border border-foreground/10 text-foreground placeholder:text-foreground/20 focus:outline-none focus:border-cyan-500/50 focus:ring-2 focus:ring-cyan-500/20 transition-all text-sm"
+                                        />
+                                    </div>
+
+                                    {/* Major List */}
+                                    <div className="space-y-1.5 max-h-56 overflow-y-auto pr-1">
+                                        {filteredEditMajors.map((m) => (
+                                            <button
+                                                key={m}
+                                                onClick={() => setEditMajor(m)}
+                                                className={`w-full p-3.5 rounded-xl text-left transition-all border text-sm ${editMajor === m
+                                                    ? "bg-cyan-600/15 border-cyan-500/30 text-foreground shadow-sm"
+                                                    : "bg-foreground/[0.02] border-transparent text-foreground/70 hover:bg-foreground/5"
+                                                    }`}
+                                            >
+                                                <span className="font-medium">{m}</span>
+                                            </button>
+                                        ))}
+                                        {filteredEditMajors.length === 0 && editMajorSearch && (
+                                            <button
+                                                onClick={() => setEditMajor(editMajorSearch)}
+                                                className="w-full p-3.5 rounded-xl text-left transition-all border bg-foreground/[0.02] border-dashed border-foreground/15 text-foreground/60 hover:text-foreground hover:border-cyan-500/50 hover:bg-cyan-500/10 text-sm"
+                                            >
+                                                <span className="block text-xs text-foreground/40">Not found? Use:</span>
+                                                <span className="font-bold text-cyan-400">&quot;{editMajorSearch}&quot;</span>
+                                            </button>
+                                        )}
+                                    </div>
+                                </>
+                            )}
+
+                            {/* Action buttons */}
+                            <div className="flex gap-3 mt-6">
+                                {editStep === 2 && (
+                                    <button
+                                        onClick={() => setEditStep(1)}
+                                        className="px-5 py-3 rounded-full text-sm font-medium text-foreground/50 hover:text-foreground hover:bg-foreground/5 transition-colors"
+                                    >
+                                        Back
+                                    </button>
+                                )}
+                                <button
+                                    onClick={handleEditSave}
+                                    disabled={(editStep === 1 ? !editUniversity : !editMajor) || editSaving}
+                                    className={`flex-1 py-3 rounded-full font-semibold text-sm transition-all flex items-center justify-center gap-2 border border-foreground/10 ${(editStep === 1 ? editUniversity : editMajor) && !editSaving
+                                        ? editStep === 1
+                                            ? "bg-gradient-to-r from-blue-600/20 via-indigo-500/20 to-purple-500/20 text-foreground hover:brightness-125 hover:shadow-[0_0_20px_rgba(37,99,235,0.3)]"
+                                            : "bg-gradient-to-r from-cyan-500/20 via-blue-500/20 to-indigo-500/20 text-foreground hover:brightness-125 hover:shadow-[0_0_20px_rgba(6,182,212,0.3)]"
+                                        : "bg-foreground/5 text-foreground/20 cursor-not-allowed border-transparent"
+                                        }`}
+                                >
+                                    {editSaving ? (
+                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                    ) : (
+                                        <>
+                                            <span>{editStep === 1 ? "Next" : "Save Changes"}</span>
+                                            <ArrowRight className="w-4 h-4" />
+                                        </>
+                                    )}
+                                </button>
+                            </div>
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
         </div>
     );
 }

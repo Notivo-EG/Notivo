@@ -3,7 +3,7 @@
 import { motion } from "framer-motion";
 import { GraduationCap, Building2, ArrowRight, Search, Loader2 } from "lucide-react";
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
 const UNIVERSITIES = [
@@ -28,6 +28,8 @@ const MAJORS = [
 
 export default function MajorSetupPage() {
     const router = useRouter();
+    const searchParams = useSearchParams();
+    const newEnrollment = searchParams.get("new") === "true";
     const supabase = createClient();
 
     const [step, setStep] = useState<1 | 2>(1);
@@ -63,13 +65,13 @@ export default function MajorSetupPage() {
                 .eq('user_id', user.id)
                 .limit(1);
 
-            if (enrollments && enrollments.length > 0) {
-                // User already has an enrollment, skip setup and go to dashboard
+            if (enrollments && enrollments.length > 0 && !newEnrollment) {
+                // User already has an enrollment and is not editing, skip setup and go to dashboard
                 router.push("/dashboard");
             }
         };
         checkUser();
-    }, [router, supabase, supabase.auth]);
+    }, [router, supabase, supabase.auth, newEnrollment]);
 
     const handleContinue = async () => {
         if (step === 1 && university) {
