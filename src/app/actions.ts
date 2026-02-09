@@ -184,17 +184,30 @@ import path from 'path';
 // LEVEL 4: BRAIN UPLOAD ACTION
 import { createClient } from "@/lib/supabase/server";
 
+// Material categories for AI classification
+const MATERIAL_CATEGORIES = [
+    'lecture_slides',
+    'textbook',
+    'past_exam',
+    'problem_sheet',
+    'notes',
+    'research_paper',
+    'lab_report',
+    'syllabus'
+] as const;
+
+type MaterialCategory = typeof MATERIAL_CATEGORIES[number];
+
 export async function uploadBrainMaterial(formData: FormData, courseId: string) {
     const supabase = await createClient();
 
     try {
         const file = formData.get("file") as File;
-        const type = formData.get("type") as string; // 'slide' | 'sheet'
 
         if (!file) throw new Error("No file provided");
         if (!courseId) throw new Error("No course ID provided");
 
-        console.log(`Uploading ${type}: ${file.name} for course ${courseId}`);
+        console.log(`Uploading: ${file.name} for course ${courseId}`);
 
         // 1. Upload to Supabase Storage
         const filePath = `${courseId}/${Date.now()}_${file.name}`;
@@ -211,8 +224,7 @@ export async function uploadBrainMaterial(formData: FormData, courseId: string) 
             .from('materials')
             .getPublicUrl(filePath);
 
-        // 2. Analyze with Gemini
-        // Use Native File API
+        // 2. Upload to Gemini for analysis
         const uploadedFile = await uploadFileToGemini(file, file.type);
 
         const filePart = {
@@ -222,41 +234,136 @@ export async function uploadBrainMaterial(formData: FormData, courseId: string) 
             }
         };
 
-        let prompt = "";
-        if (type === 'slide') {
-            prompt = `
-            Analyze this Lecture Slide Deck.
-            1. Extract the main "Topics" covered.
-            2. Extract a brief 2-sentence "Summary".
-            3. Estimate the "Week Number" if mentioned (default to null).
-            
-            Output JSON: { "topics": [], "summary": "...", "week_number": number | null }
-            `;
-        } else if (type === 'sheet' || type === 'problem_sheet') {
-            prompt = `
-            Analyze this Problem Sheet / Tutorial.
-            1. Extract the list of "Concepts" tested.
-            2. Count the number of problems.
-            3. Identify the difficulty level (Easy/Medium/Hard).
-            
-            Output JSON: { "concepts": [], "problem_count": number, "difficulty": "..." }
-            `;
-        } else {
-            prompt = `Analyze this academic document. Output JSON summary.`;
+        // 3. AI Categorization - Classify the PDF type
+        const categoryPrompt = `
+        Analyze this PDF document and classify it into exactly ONE of these categories:
+        - lecture_slides: Presentation slides from lectures (PowerPoint exports, bullet-point heavy)
+        - textbook: Book chapters, reference material, or educational books
+        - past_exam: Previous examination papers, midterms, finals, sample exams
+        - problem_sheet: Practice exercises, tutorials, worksheets, homework assignments
+        - notes: Study notes, summaries, handwritten or typed personal notes
+        - research_paper: Academic journal articles, research publications, scientific papers
+        - lab_report: Laboratory reports, experiment documentation, practical work
+        - syllabus: Course outlines, schedules, course descriptions
+
+        Analyze the structure, formatting, and content to determine the most accurate category.
+        
+        Output ONLY valid JSON (no markdown): { "category": "category_name", "confidence": 0.0-1.0 }
+        `;
+
+        const categoryResult = await geminiVisionModel.generateContent([categoryPrompt, filePart]);
+        const categoryResponse = await categoryResult.response;
+        const categoryText = categoryResponse.text();
+        const categoryJsonString = categoryText.replace(/```json/g, "").replace(/```/g, "").trim();
+        const categoryData = JSON.parse(categoryJsonString);
+
+        // Validate and fallback to 'notes' if invalid category
+        const detectedCategory: MaterialCategory = MATERIAL_CATEGORIES.includes(categoryData.category)
+            ? categoryData.category
+            : 'notes';
+
+        console.log(`AI classified "${file.name}" as: ${detectedCategory} (confidence: ${categoryData.confidence})`);
+
+        // 4. Content Analysis - Generate summary based on category
+        let analysisPrompt = "";
+        switch (detectedCategory) {
+            case 'lecture_slides':
+                analysisPrompt = `
+                Analyze this Lecture Slide Deck.
+                1. Extract the main "Topics" covered.
+                2. Extract a brief 2-sentence "Summary".
+                3. Estimate the "Week Number" if mentioned (default to null).
+                
+                Output JSON: { "topics": [], "summary": "...", "week_number": number | null }
+                `;
+                break;
+            case 'problem_sheet':
+                analysisPrompt = `
+                Analyze this Problem Sheet / Tutorial.
+                1. Extract the list of "Concepts" tested.
+                2. Count the number of problems.
+                3. Identify the difficulty level (Easy/Medium/Hard).
+                
+                Output JSON: { "concepts": [], "problem_count": number, "difficulty": "..." }
+                `;
+                break;
+            case 'past_exam':
+                analysisPrompt = `
+                Analyze this Past Examination Paper.
+                1. Extract the exam type (Midterm/Final/Quiz).
+                2. Extract the main "Topics" covered.
+                3. Count the number of questions.
+                4. Identify overall difficulty (Easy/Medium/Hard).
+                
+                Output JSON: { "exam_type": "...", "topics": [], "question_count": number, "difficulty": "..." }
+                `;
+                break;
+            case 'textbook':
+                analysisPrompt = `
+                Analyze this Textbook/Reference Material.
+                1. Extract the chapter/section title if visible.
+                2. Extract the main "Concepts" covered.
+                3. Extract a 2-sentence "Summary".
+                
+                Output JSON: { "chapter": "...", "concepts": [], "summary": "..." }
+                `;
+                break;
+            case 'research_paper':
+                analysisPrompt = `
+                Analyze this Research Paper.
+                1. Extract the title and authors if visible.
+                2. Extract the main research topic/field.
+                3. Extract key findings or conclusions.
+                
+                Output JSON: { "title": "...", "authors": [], "field": "...", "key_findings": [] }
+                `;
+                break;
+            case 'lab_report':
+                analysisPrompt = `
+                Analyze this Lab Report.
+                1. Extract the experiment title.
+                2. Extract the main objectives.
+                3. Summarize the methodology briefly.
+                
+                Output JSON: { "experiment": "...", "objectives": [], "methodology_summary": "..." }
+                `;
+                break;
+            case 'syllabus':
+                analysisPrompt = `
+                Analyze this Course Syllabus.
+                1. Extract course name and code if visible.
+                2. Extract main topics/modules.
+                3. Extract assessment breakdown if available.
+                
+                Output JSON: { "course_name": "...", "course_code": "...", "modules": [], "assessments": [] }
+                `;
+                break;
+            default: // notes
+                analysisPrompt = `
+                Analyze these Study Notes.
+                1. Extract the main "Topics" covered.
+                2. Extract a brief 2-sentence "Summary".
+                
+                Output JSON: { "topics": [], "summary": "..." }
+                `;
         }
 
-        const result = await geminiVisionModel.generateContent([prompt, filePart]);
-        const response = await result.response;
-        const text = response.text();
-        const jsonString = text.replace(/```json/g, "").replace(/```/g, "").trim();
-        const aiAnalysis = JSON.parse(jsonString);
+        const analysisResult = await geminiVisionModel.generateContent([analysisPrompt, filePart]);
+        const analysisResponse = await analysisResult.response;
+        const analysisText = analysisResponse.text();
+        const analysisJsonString = analysisText.replace(/```json/g, "").replace(/```/g, "").trim();
+        const aiAnalysis = JSON.parse(analysisJsonString);
 
-        // 3. Save to Database
+        // Add category info to analysis
+        aiAnalysis.detected_category = detectedCategory;
+        aiAnalysis.category_confidence = categoryData.confidence;
+
+        // 5. Save to Database with detected category
         const { error: dbError } = await supabase
             .from('course_materials')
             .insert({
                 student_course_id: courseId,
-                type: type,
+                type: detectedCategory,
                 title: file.name,
                 content_url: publicUrl,
                 ai_summary: aiAnalysis,
@@ -265,7 +372,7 @@ export async function uploadBrainMaterial(formData: FormData, courseId: string) 
 
         if (dbError) throw dbError;
 
-        return { success: true, analysis: aiAnalysis };
+        return { success: true, analysis: aiAnalysis, category: detectedCategory };
 
     } catch (error: any) {
         console.error("Upload Error:", error);

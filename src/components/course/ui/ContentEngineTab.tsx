@@ -1,17 +1,33 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { usePreferences } from "@/context/PreferencesContext";
 import { FileUpload } from "@/components/FileUpload";
-import { BookOpen, Layers, FileText, Loader2, Save, Upload, CheckCircle2, Trash2 } from "lucide-react";
+import { BookOpen, Layers, FileText, Loader2, Save, Upload, CheckCircle2, Trash2, ChevronDown, ChevronRight, GraduationCap, FlaskConical, ScrollText, FileSpreadsheet, Notebook, BookMarked, ClipboardList } from "lucide-react";
 import { uploadBrainMaterial } from "@/app/actions";
+
+// Category configuration with icons and display names
+const CATEGORY_CONFIG: Record<string, { label: string; icon: React.ComponentType<any>; color: string }> = {
+    lecture_slides: { label: "Lecture Slides", icon: Layers, color: "bg-blue-500/10 text-blue-500" },
+    textbook: { label: "Textbook", icon: BookMarked, color: "bg-purple-500/10 text-purple-500" },
+    past_exam: { label: "Past Exams", icon: ClipboardList, color: "bg-red-500/10 text-red-500" },
+    problem_sheet: { label: "Problem Sheets", icon: FileSpreadsheet, color: "bg-orange-500/10 text-orange-500" },
+    notes: { label: "Notes", icon: Notebook, color: "bg-green-500/10 text-green-500" },
+    research_paper: { label: "Research Papers", icon: ScrollText, color: "bg-cyan-500/10 text-cyan-500" },
+    lab_report: { label: "Lab Reports", icon: FlaskConical, color: "bg-pink-500/10 text-pink-500" },
+    syllabus: { label: "Syllabus", icon: GraduationCap, color: "bg-yellow-500/10 text-yellow-500" },
+    // Legacy types for backwards compatibility
+    slide: { label: "Lecture Slides", icon: Layers, color: "bg-blue-500/10 text-blue-500" },
+    sheet: { label: "Problem Sheets", icon: FileSpreadsheet, color: "bg-orange-500/10 text-orange-500" },
+};
 
 export function ContentEngineTab({ courseId }: { courseId: string }) {
     const supabase = createClient();
     const { playSound } = usePreferences();
     const [isUploading, setIsUploading] = useState(false);
     const [materials, setMaterials] = useState<any[]>([]);
+    const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
 
     useEffect(() => {
         const fetchMaterials = async () => {
@@ -20,19 +36,32 @@ export function ContentEngineTab({ courseId }: { courseId: string }) {
                 .select('*')
                 .eq('student_course_id', courseId)
                 .order('created_at', { ascending: false });
-            if (data) setMaterials(data);
+            if (data) {
+                setMaterials(data);
+                // Expand all categories that have materials by default
+                const categories = new Set<string>(data.map((m: any) => m.type as string));
+                setExpandedCategories(categories);
+            }
         };
         fetchMaterials();
     }, [courseId, supabase]);
+
+    // Group materials by category
+    const groupedMaterials = useMemo(() => {
+        const groups: Record<string, any[]> = {};
+        materials.forEach(m => {
+            const type = m.type || 'notes';
+            if (!groups[type]) groups[type] = [];
+            groups[type].push(m);
+        });
+        return groups;
+    }, [materials]);
 
     const handleUpload = async (file: File) => {
         setIsUploading(true);
         try {
             const formData = new FormData();
             formData.append("file", file);
-            // Auto-detect type based on name/extension for now, simple logic
-            const type = file.name.toLowerCase().includes("sheet") ? "sheet" : "slide";
-            formData.append("type", type);
 
             const result = await uploadBrainMaterial(formData, courseId);
             if (result.success) {
@@ -42,7 +71,13 @@ export function ContentEngineTab({ courseId }: { courseId: string }) {
                     .select('*')
                     .eq('student_course_id', courseId)
                     .order('created_at', { ascending: false });
-                if (data) setMaterials(data);
+                if (data) {
+                    setMaterials(data);
+                    // Expand the category of the newly uploaded material
+                    if (result.category) {
+                        setExpandedCategories(prev => new Set([...prev, result.category]));
+                    }
+                }
             } else {
                 throw new Error(result.error);
             }
@@ -71,6 +106,22 @@ export function ContentEngineTab({ courseId }: { courseId: string }) {
         }
     };
 
+    const toggleCategory = (category: string) => {
+        setExpandedCategories(prev => {
+            const next = new Set(prev);
+            if (next.has(category)) {
+                next.delete(category);
+            } else {
+                next.add(category);
+            }
+            return next;
+        });
+    };
+
+    const getCategoryConfig = (type: string) => {
+        return CATEGORY_CONFIG[type] || { label: type, icon: FileText, color: "bg-foreground/10 text-foreground" };
+    };
+
     return (
         <div className="grid lg:grid-cols-3 gap-8">
             {/* LEFT: Upload & Textbook */}
@@ -84,7 +135,7 @@ export function ContentEngineTab({ courseId }: { courseId: string }) {
                     <FileUpload
                         onFileSelect={handleUpload}
                         isProcessing={isUploading}
-                        label="Drop PDFs: Course Slides or Problem Sheets"
+                        label="Drop any PDF - AI will categorize it automatically"
                     />
                 </div>
 
@@ -109,55 +160,93 @@ export function ContentEngineTab({ courseId }: { courseId: string }) {
                 </div>
             </div>
 
-            {/* RIGHT: Knowledge Base List */}
+            {/* RIGHT: Knowledge Base with Folders */}
             <div className="lg:col-span-2">
                 <h3 className="text-lg font-bold mb-4 flex items-center gap-2 text-foreground/80">
                     <Layers className="w-5 h-5" />
                     Knowledge Base
+                    {materials.length > 0 && (
+                        <span className="text-sm font-normal text-foreground/40">
+                            ({materials.length} {materials.length === 1 ? 'file' : 'files'})
+                        </span>
+                    )}
                 </h3>
 
                 {materials.length === 0 ? (
                     <div className="h-[400px] border-2 border-dashed border-foreground/10 rounded-2xl flex flex-col items-center justify-center text-foreground/30">
                         <Layers className="w-12 h-12 mb-4 opacity-50" />
                         <p>No materials uploaded yet.</p>
-                        <p className="text-sm">Upload slides to activate the Content Engine.</p>
+                        <p className="text-sm">Upload PDFs - AI will organize them into categories.</p>
                     </div>
                 ) : (
-                    <div className="grid gap-3">
-                        {materials.map((m, idx) => {
-                            const visualIndex = materials.length - idx;
+                    <div className="space-y-3">
+                        {Object.entries(groupedMaterials).map(([category, items]) => {
+                            const config = getCategoryConfig(category);
+                            const Icon = config.icon;
+                            const isExpanded = expandedCategories.has(category);
+
                             return (
-                                <div key={m.id} className="p-4 rounded-xl bg-card-bg border border-card-border flex items-center gap-4 hover:bg-foreground/5 transition-colors group">
-                                    <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${m.type === 'slide' ? 'bg-blue-500/10 text-blue-500' : 'bg-green-500/10 text-green-500'}`}>
-                                        {m.type === 'slide' ? <Layers size={20} /> : <FileText size={20} />}
-                                    </div>
-                                    <div className="flex-1 min-w-0">
-                                        <div className="flex items-center gap-2">
-                                            <span className="text-xs font-bold text-foreground/30">#{visualIndex}</span>
-                                            <h4 className="font-medium text-foreground truncate">{m.title}</h4>
-                                        </div>
-                                        <p className="text-xs text-foreground/40 capitalize flex items-center gap-2 mt-0.5">
-                                            {m.type} • {new Date(m.created_at).toLocaleDateString()}
-                                        </p>
-                                    </div>
-                                    <div className="px-3 py-1 rounded-full bg-green-500/10 text-green-500 text-xs font-medium flex items-center gap-1">
-                                        <CheckCircle2 className="w-3 h-3" />
-                                        AI Ready
-                                    </div>
+                                <div key={category} className="bg-card-bg border border-card-border rounded-2xl overflow-hidden">
+                                    {/* Category Header */}
                                     <button
-                                        onClick={(e) => deleteMaterial(e, m.id)}
-                                        className="p-2 rounded-lg text-foreground/20 hover:text-red-400 hover:bg-red-500/10 transition-colors"
-                                        title="Delete Material"
+                                        onClick={() => toggleCategory(category)}
+                                        className="w-full p-4 flex items-center gap-3 hover:bg-foreground/5 transition-colors"
                                     >
-                                        <Trash2 className="w-4 h-4" />
+                                        <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${config.color}`}>
+                                            <Icon size={20} />
+                                        </div>
+                                        <div className="flex-1 text-left">
+                                            <h4 className="font-medium text-foreground">{config.label}</h4>
+                                            <p className="text-xs text-foreground/40">
+                                                {items.length} {items.length === 1 ? 'file' : 'files'}
+                                            </p>
+                                        </div>
+                                        {isExpanded ? (
+                                            <ChevronDown className="w-5 h-5 text-foreground/40" />
+                                        ) : (
+                                            <ChevronRight className="w-5 h-5 text-foreground/40" />
+                                        )}
                                     </button>
 
+                                    {/* Category Items */}
+                                    {isExpanded && (
+                                        <div className="border-t border-card-border">
+                                            {items.map((m, idx) => (
+                                                <div
+                                                    key={m.id}
+                                                    className="px-4 py-3 flex items-center gap-3 hover:bg-foreground/5 transition-colors border-b border-card-border last:border-b-0"
+                                                >
+                                                    <div className="w-6 h-6 rounded flex items-center justify-center bg-foreground/5 text-xs text-foreground/40 shrink-0">
+                                                        {idx + 1}
+                                                    </div>
+                                                    <div className="flex-1 min-w-0">
+                                                        <h5 className="font-medium text-foreground text-sm truncate">{m.title}</h5>
+                                                        <p className="text-xs text-foreground/40">
+                                                            {new Date(m.created_at).toLocaleDateString()}
+                                                        </p>
+                                                    </div>
+                                                    <div className="px-2 py-1 rounded-full bg-green-500/10 text-green-500 text-xs font-medium flex items-center gap-1">
+                                                        <CheckCircle2 className="w-3 h-3" />
+                                                        Ready
+                                                    </div>
+                                                    <button
+                                                        onClick={(e) => deleteMaterial(e, m.id)}
+                                                        className="p-2 rounded-lg text-foreground/20 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                                                        title="Delete Material"
+                                                    >
+                                                        <Trash2 className="w-4 h-4" />
+                                                    </button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
                                 </div>
                             );
                         })}
                     </div>
                 )}
             </div>
-        </div >
+        </div>
     );
 }
+

@@ -4,11 +4,12 @@ import { useState, useRef, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { VIDEO_API_URL } from "@/lib/videoApi";
 import { useGeneration } from "@/context/GenerationContext";
+import { MaterialSelector } from "@/components/course/ui/MaterialSelector";
 import { motion } from "framer-motion";
 import { v4 as uuidv4 } from "uuid";
 import {
-    Video, Layers, Sparkles, Loader2, Play, Trash2, Download,
-    Clock, CheckCircle2, Settings2
+    Video, Loader2, Play, Trash2, Download,
+    Clock, Settings2
 } from "lucide-react";
 import { CustomVideoPlayer } from "@/components/ui/CustomVideoPlayer";
 
@@ -55,7 +56,7 @@ export function VideoTutorTab({ courseId }: VideoTutorTabProps) {
     const [localProgress, setLocalProgress] = useState({ percent: 0, message: '' });
     const [currentStage, setCurrentStage] = useState<Stage | null>(null);
     const [completedStages, setCompletedStages] = useState<Stage[]>([]);
-    const [jobId, setJobId] = useState<string | null>(null);
+    const [, setJobId] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
     const eventSourceRef = useRef<EventSource | null>(null);
 
@@ -80,6 +81,7 @@ export function VideoTutorTab({ courseId }: VideoTutorTabProps) {
     // Fetch video history
     useEffect(() => {
         fetchVideoHistory();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [courseId]);
 
     const fetchVideoHistory = async () => {
@@ -91,13 +93,7 @@ export function VideoTutorTab({ courseId }: VideoTutorTabProps) {
         if (data) setVideoHistory(data);
     };
 
-    const handleToggleMaterial = (id: string) => {
-        if (selectedMaterialIds.includes(id)) {
-            setSelectedMaterialIds(selectedMaterialIds.filter(i => i !== id));
-        } else {
-            setSelectedMaterialIds([...selectedMaterialIds, id]);
-        }
-    };
+
 
     const getSourceIndex = (materialId: string) => {
         const idx = materials.findIndex(m => m.id === materialId);
@@ -280,43 +276,12 @@ export function VideoTutorTab({ courseId }: VideoTutorTabProps) {
             <div className="lg:col-span-1 space-y-6">
                 {/* Material Selector */}
                 <div className="bg-card-bg border border-card-border rounded-2xl p-6">
-                    <div className="flex items-center justify-between mb-4">
-                        <h3 className="text-sm font-bold text-foreground/70 flex items-center gap-2">
-                            <Layers className="w-4 h-4" />
-                            Select Source Material
-                        </h3>
-                        <span className="text-xs text-foreground/40">
-                            {selectedMaterialIds.length} selected
-                        </span>
-                    </div>
-
-                    {materials.length === 0 ? (
-                        <p className="text-sm text-foreground/40">No materials found. Upload PDFs in the Content Engine first.</p>
-                    ) : (
-                        <div className="space-y-2 max-h-[200px] overflow-y-auto pr-2 custom-scrollbar">
-                            {materials.map((m, idx) => {
-                                const isSelected = selectedMaterialIds.includes(m.id);
-                                const visualIndex = materials.length - idx;
-                                return (
-                                    <button
-                                        key={m.id}
-                                        onClick={() => handleToggleMaterial(m.id)}
-                                        disabled={isGenerating}
-                                        className={`w-full text-left p-3 rounded-xl border transition-all flex items-center gap-3 group ${isSelected
-                                            ? 'bg-primary/10 border-primary/50 text-foreground'
-                                            : 'bg-card-bg border-card-border text-foreground/60 hover:bg-foreground/5'
-                                            } ${isGenerating ? 'opacity-50 cursor-not-allowed' : ''}`}
-                                    >
-                                        <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${isSelected ? 'bg-primary text-primary-foreground' : 'bg-foreground/10 text-foreground/40'}`}>
-                                            #{visualIndex}
-                                        </div>
-                                        <span className="truncate text-sm font-medium flex-1">{m.title}</span>
-                                        {isSelected && <CheckCircle2 className="w-4 h-4 text-primary shrink-0" />}
-                                    </button>
-                                );
-                            })}
-                        </div>
-                    )}
+                    <MaterialSelector
+                        courseId={courseId}
+                        selectedIds={selectedMaterialIds}
+                        onSelectionChange={setSelectedMaterialIds}
+                        multiSelect={true}
+                    />
                 </div>
 
                 {/* Config Toggle */}

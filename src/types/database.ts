@@ -103,7 +103,7 @@ export interface Database {
                 Row: {
                     id: string
                     student_course_id: string
-                    type: 'syllabus' | 'slide' | 'sheet' | 'reference_toc' | 'past_exam' | 'notes'
+                    type: 'lecture_slides' | 'textbook' | 'past_exam' | 'problem_sheet' | 'notes' | 'research_paper' | 'lab_report' | 'syllabus'
                     title: string | null
                     week_number: number | null
                     content_url: string
@@ -113,7 +113,7 @@ export interface Database {
                 Insert: {
                     id?: string
                     student_course_id: string
-                    type: 'syllabus' | 'slide' | 'sheet' | 'reference_toc' | 'past_exam' | 'notes'
+                    type: 'lecture_slides' | 'textbook' | 'past_exam' | 'problem_sheet' | 'notes' | 'research_paper' | 'lab_report' | 'syllabus'
                     title?: string | null
                     week_number?: number | null
                     content_url: string
@@ -123,7 +123,7 @@ export interface Database {
                 Update: {
                     id?: string
                     student_course_id?: string
-                    type?: 'syllabus' | 'slide' | 'sheet' | 'reference_toc' | 'past_exam' | 'notes'
+                    type?: 'lecture_slides' | 'textbook' | 'past_exam' | 'problem_sheet' | 'notes' | 'research_paper' | 'lab_report' | 'syllabus'
                     title?: string | null
                     week_number?: number | null
                     content_url?: string
