@@ -204,7 +204,7 @@ export default function MajorSetupPage() {
                                         className="w-full p-4 rounded-xl text-left transition-all border bg-white/5 border-dashed border-white/20 text-white/60 hover:text-white hover:border-blue-500/50 hover:bg-blue-500/10"
                                     >
                                         <span className="block text-sm">Not found? Use:</span>
-                                        <span className="font-bold text-blue-400">"{universitySearch}"</span>
+                                        <span className="font-bold text-blue-400">&quot;{universitySearch}&quot;</span>
                                     </button>
                                 )}
                             </div>
@@ -255,7 +255,7 @@ export default function MajorSetupPage() {
                                         className="w-full p-4 rounded-xl text-left transition-all border bg-white/5 border-dashed border-white/20 text-white/60 hover:text-white hover:border-cyan-500/50 hover:bg-cyan-500/10"
                                     >
                                         <span className="block text-sm">Not found? Use:</span>
-                                        <span className="font-bold text-cyan-400">"{majorSearch}"</span>
+                                        <span className="font-bold text-cyan-400">&quot;{majorSearch}&quot;</span>
                                     </button>
                                 )}
                             </div>
