@@ -5,9 +5,34 @@ import { ArrowRight, BookOpen, Sparkles, Upload, Music, Swords, Layers, Video, I
 import Link from "next/link";
 import Image from "next/image";
 import { useRef, MouseEvent, useState } from "react";
+import { createClient } from "@/lib/supabase/client";
+import { useRouter } from "next/navigation";
 
 export default function LandingPage() {
   const containerRef = useRef<HTMLDivElement>(null);
+  const router = useRouter();
+  const [loggingIn, setLoggingIn] = useState(false);
+
+  const handleAutoLogin = async () => {
+    if (loggingIn) return;
+    setLoggingIn(true);
+    try {
+      const supabase = createClient();
+      const { error } = await supabase.auth.signInWithPassword({
+        email: "mmzahran31@gmail.com",
+        password: "MMz@Hran123",
+      });
+      if (error) {
+        alert(error.message);
+        return;
+      }
+      router.push("/dashboard");
+    } catch {
+      alert("Login failed");
+    } finally {
+      setLoggingIn(false);
+    }
+  };
 
   // --- Scroll Animations ---
   // All hero/semicircle/mockup animations driven by the mockup wrapper scroll
@@ -143,8 +168,10 @@ export default function LandingPage() {
                 Notiva
               </div>
               <div className="flex gap-4">
-                <Link href="/login" className="flex items-center justify-center hover:text-white transition-colors">Sign In</Link>
-                <Link href="/signup" className="px-3 py-1.5 md:px-4 md:py-2 bg-white/10 hover:bg-white/20 text-white rounded-full transition-colors">Get Started</Link>
+                {/* <Link href="/login" className="flex items-center justify-center hover:text-white transition-colors">Sign In</Link> */}
+                <button onClick={handleAutoLogin} disabled={loggingIn} className="px-3 py-1.5 md:px-4 md:py-2 bg-white/10 hover:bg-white/20 text-white rounded-full transition-colors">
+                  {loggingIn ? "Signing in..." : "Get Started"}
+                </button>
               </div>
             </nav>
 
@@ -182,12 +209,12 @@ export default function LandingPage() {
                 transition={{ duration: 0.8, delay: 0.3, ease: "easeOut" }}
                 className="mt-8 flex flex-col sm:flex-row gap-4 items-center"
               >
-                <Link href="/signup">
+                <div onClick={handleAutoLogin} className="cursor-pointer">
                   <MagneticButton className="group relative flex items-center justify-center gap-2 px-6 py-3 md:px-8 md:py-4 rounded-full bg-white text-black font-bold text-base md:text-lg transition-all shadow-[0_0_40px_-10px_rgba(255,255,255,0.5)] hover:shadow-[0_0_60px_-10px_rgba(255,255,255,0.7)]">
-                    Try It Free
+                    {loggingIn ? "Signing in..." : "Try It Free"}
                     <ArrowRight className="w-4 h-4 md:w-5 md:h-5 transition-transform group-hover:translate-x-1" />
                   </MagneticButton>
-                </Link>
+                </div>
               </motion.div>
             </motion.div>
           </div>
@@ -487,13 +514,14 @@ export default function LandingPage() {
             Upload once, learn six different ways. Join students who turned
             their PDFs into an AI-powered study system.
           </p>
-          <Link
-            href="/signup"
+          <button
+            onClick={handleAutoLogin}
+            disabled={loggingIn}
             className="relative inline-flex items-center gap-2 px-10 py-5 rounded-full bg-white text-black font-semibold text-lg transition-all hover:scale-105 hover:bg-white/90"
           >
-            Start Free Trial
+            {loggingIn ? "Signing in..." : "Start Free Trial"}
             <ArrowRight className="w-5 h-5" />
-          </Link>
+          </button>
         </motion.div>
       </section>
 
@@ -511,8 +539,8 @@ export default function LandingPage() {
             Notiva
           </div>
           <div className="flex gap-6 text-sm text-white/40">
-            <Link href="/login" className="hover:text-white transition-colors">Sign In</Link>
-            <Link href="/signup" className="hover:text-white transition-colors">Get Started</Link>
+            {/* <Link href="/login" className="hover:text-white transition-colors">Sign In</Link> */}
+            <button onClick={handleAutoLogin} className="hover:text-white transition-colors">{loggingIn ? "Signing in..." : "Get Started"}</button>
           </div>
           <p className="text-sm text-white/30">&copy; 2026 Notiva. All rights reserved.</p>
         </div>
