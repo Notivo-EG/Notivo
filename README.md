@@ -94,11 +94,6 @@ Watch the full walkthrough on YouTube:
 - **Practice exams** with MCQ, True/False, written response, and problem-solving questions, all auto-graded
 - **Material classification** that sorts uploads into lectures, problem sheets, syllabi, past exams, notes, and research
 
-### Exam War Room
-- See all upcoming exams across all your majors in one view
-- Gemini generates tactical study plans based on your mastery profile
-- Upload exam schedules (even as images) and Gemini parses them automatically
-
 ### Course Materials
 - Upload PDFs, slides, spreadsheets, and images
 - Gemini handles OCR, topic extraction, and classification on upload
